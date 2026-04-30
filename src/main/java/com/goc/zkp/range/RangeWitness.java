@@ -4,6 +4,6 @@ import java.math.BigInteger;
 
 public record RangeWitness(
         BigInteger value,
-        BigInteger randomness,
+        BigInteger secretKey,
         BigInteger publicKey
 ) {}
