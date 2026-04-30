@@ -5,23 +5,26 @@ import com.goc.core.CryptoGroup;
 import com.goc.crypto.FiatShamir;
 import com.goc.zkp.range.RangeProof;
 import com.goc.zkp.range.RangeVerifier;
+import com.goc.zkp.range.equality.EqualityProof;
+import com.goc.zkp.range.equality.EqualityVerifier;
 
 import java.math.BigInteger;
 
 /**
- * Verifies a bit decomposition range proof.
- *
+ * Verifies a bit-decomposition range proof.
+ * <p>
  * Ensures that:
- *   1. Proof dimensions match the expected bit length.
- *   2. The aggregated ciphertext matches the provided encrypted value.
- *   3. Each bit's derived key is valid (Chaum-Pedersen).
- *   4. Each encrypted bit is strictly 0 or 1 (OrProof).
+ * 1. Proof dimensions match the expected bit length.
+ * 2. The aggregated ciphertext matches the provided encrypted value.
+ * 3. Each bit's derived key is valid (Chaum-Pedersen).
+ * 4. Each encrypted bit is strictly 0 or 1 (OrProof).
  */
 public class BitDecompositionRangeVerifier implements RangeVerifier {
 
     private final CryptoGroup group;
     private final BigInteger publicKey;
     private final int bitLength;
+    private final EqualityVerifier equalityVerifier;
 
     // The verifier does not need randomness (Crypto) — only the public key.
     public BitDecompositionRangeVerifier(CryptoGroup group, BigInteger publicKey, int bitLength) {
@@ -29,25 +32,26 @@ public class BitDecompositionRangeVerifier implements RangeVerifier {
         this.group = group;
         this.publicKey = publicKey;
         this.bitLength = bitLength;
+        this.equalityVerifier = new EqualityVerifier(group);
     }
 
     @Override
     public boolean verify(RangeProof proof) {
-        if (!validateDimensions(proof))  return false;
-        if (!verifyAggregation(proof))   return false;
+        if (!validateDimensions(proof)) return false;
+        if (!verifyAggregation(proof)) return false;
 
-        Ciphertext[]         encryptedBits = proof.getEncryptedBits();
-        OrProof[]            bitProofs     = proof.getBitProofs();
-        ChaumPedersenProof[] keyProofs     = proof.getKeyProofs();
+        Ciphertext[] encryptedBits = proof.getEncryptedBits();
+        OrProof[] bitProofs = proof.getBitProofs();
+        EqualityProof[] keyProofs = proof.getKeyProofs();
 
         for (int i = 0; i < bitLength; i++) {
             BigInteger c1 = encryptedBits[i].c1;
 
             // Recompute y = g^H(c1) independently — never trust the prover's claimed base.
-            BigInteger derivedBase      = group.pow(group.g, FiatShamir.hashToZq(group.q, c1));
-            BigInteger derivedPublicKey = keyProofs[i].publicZ();
+            BigInteger derivedBase = group.pow(group.g, FiatShamir.hashToZq(group.q, c1));
+            BigInteger derivedPublicKey = keyProofs[i].b();
 
-            if (!verifyChaumPedersen(keyProofs[i], derivedBase, derivedPublicKey)) return false;
+            if (!equalityVerifier.verify(keyProofs[i])) return false;
             if (!verifyBitIsZeroOrOne(bitProofs[i], encryptedBits[i], derivedPublicKey)) return false;
         }
 
@@ -59,10 +63,10 @@ public class BitDecompositionRangeVerifier implements RangeVerifier {
     // -------------------------------------------------------------------------
 
     private boolean validateDimensions(RangeProof proof) {
-        return proof.getBitLength()           == bitLength
+        return proof.getBitLength() == bitLength
                 && proof.getEncryptedBits().length == bitLength
-                && proof.getBitProofs().length     == bitLength
-                && proof.getKeyProofs().length     == bitLength;
+                && proof.getBitProofs().length == bitLength
+                && proof.getKeyProofs().length == bitLength;
     }
 
     // -------------------------------------------------------------------------
@@ -90,53 +94,22 @@ public class BitDecompositionRangeVerifier implements RangeVerifier {
     }
 
     // -------------------------------------------------------------------------
-    // Chaum-Pedersen check
-    // -------------------------------------------------------------------------
-
-    /**
-     * Verifies that the prover knows x such that h = g^x and z = y^x.
-     *
-     *   e  = H(g, h, y, z, t1, t2)
-     *   g^s == t1 · h^e
-     *   y^s == t2 · z^e
-     */
-    private boolean verifyChaumPedersen(
-            ChaumPedersenProof proof,
-            BigInteger derivedBase,
-            BigInteger derivedPublicKey
-    ) {
-        BigInteger challenge = FiatShamir.hashToZq(
-                group.q,
-                group.g, publicKey, derivedBase, derivedPublicKey,
-                proof.commitmentT1(), proof.commitmentT2()
-        );
-
-        BigInteger lhs1 = group.pow(group.g, proof.responseS());
-        BigInteger rhs1 = group.mul(proof.commitmentT1(), group.pow(publicKey, challenge));
-        if (!lhs1.equals(rhs1)) return false;
-
-        BigInteger lhs2 = group.pow(derivedBase, proof.responseS());
-        BigInteger rhs2 = group.mul(proof.commitmentT2(), group.pow(derivedPublicKey, challenge));
-        return lhs2.equals(rhs2);
-    }
-
-    // -------------------------------------------------------------------------
     // OrProof check (bit ∈ {0, 1})
     // -------------------------------------------------------------------------
 
     /**
      * Verifies that the encrypted bit is 0 or 1.
-     *
-     *   totalChallenge = H(g, h, c1, c2, z, a0, d0, a1, d1)
-     *   e0 + e1 == totalChallenge  (mod q)
-     *
-     *   Branch 0:
-     *     g^z0 == a0 · c1^e0
-     *     h^z0 == d0 · (c2')^e0
-     *
-     *   Branch 1:
-     *     g^z1 == a1 · c1^e1
-     *     h^z1 == d1 · (c2' / g)^e1
+     * <p>
+     * totalChallenge = H(g, h, c1, c2, z, a0, d0, a1, d1)
+     * e0 + e1 == totalChallenge  (mod q)
+     * <p>
+     * Branch 0:
+     * g^z0 == a0 · c1^e0
+     * h^z0 == d0 · (c2')^e0
+     * <p>
+     * Branch 1:
+     * g^z1 == a1 · c1^e1
+     * h^z1 == d1 · (c2' / g)^e1
      */
     private boolean verifyBitIsZeroOrOne(
             OrProof proof,
@@ -146,7 +119,7 @@ public class BitDecompositionRangeVerifier implements RangeVerifier {
         BigInteger c1 = ciphertext.c1;
         BigInteger c2 = ciphertext.c2;
 
-        BigInteger normalizedC2      = group.mul(c2, group.inverse(derivedPublicKey));
+        BigInteger normalizedC2 = group.mul(c2, group.inverse(derivedPublicKey));
         BigInteger normalizedC2IfOne = group.mul(normalizedC2, group.inverse(group.g));
 
         // Challenge sum check
