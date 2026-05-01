@@ -2,6 +2,7 @@ package com.goc.zkp.range.bitdecomposition;
 
 import com.goc.core.Ciphertext;
 import com.goc.core.CryptoGroup;
+import com.goc.crypto.DomainTags;
 import com.goc.crypto.FiatShamir;
 import com.goc.zkp.range.RangeProof;
 import com.goc.zkp.range.RangeVerifier;
@@ -47,11 +48,12 @@ public class BitDecompositionRangeVerifier implements RangeVerifier {
         for (int i = 0; i < bitLength; i++) {
             BigInteger c1 = encryptedBits[i].c1;
 
-            // Recompute y = g^H(c1) independently — never trust the prover's claimed base.
-            BigInteger derivedBase = group.pow(group.g, FiatShamir.hashToZq(group.q, c1));
+            BigInteger derivedBase = group.pow(group.g,
+                    FiatShamir.hashToZq(group.q, DomainTags.BIT_DECOMPOSITION_BASE, c1));
+
             BigInteger derivedPublicKey = keyProofs[i].b();
 
-            if (!equalityVerifier.verify(keyProofs[i])) return false;
+            if (!equalityVerifier.verify(keyProofs[i], group.g, c1, derivedBase, derivedPublicKey)) return false;
             if (!verifyBitIsZeroOrOne(bitProofs[i], encryptedBits[i], derivedPublicKey)) return false;
         }
 
@@ -125,10 +127,12 @@ public class BitDecompositionRangeVerifier implements RangeVerifier {
         // Challenge sum check
         BigInteger totalChallenge = FiatShamir.hashToZq(
                 group.q,
+                DomainTags.OR_PROOF_CHALLENGE,
                 group.g, publicKey, c1, c2, derivedPublicKey,
                 proof.commitmentA0(), proof.commitmentD0(),
                 proof.commitmentA1(), proof.commitmentD1()
         );
+
         BigInteger challengeSum = proof.challengeE0().add(proof.challengeE1()).mod(group.q);
         if (!totalChallenge.equals(challengeSum)) return false;
 

@@ -3,6 +3,7 @@ package com.goc.zkp.range.bitdecomposition;
 import com.goc.core.Ciphertext;
 import com.goc.core.CryptoGroup;
 import com.goc.crypto.Crypto;
+import com.goc.crypto.DomainTags;
 import com.goc.crypto.FiatShamir;
 import com.goc.zkp.range.RangeProof;
 import com.goc.zkp.range.RangeProver;
@@ -58,7 +59,8 @@ public class BitDecompositionRangeProver implements RangeProver {
             // prevents the same key from being reused across different bits (replay protection)
             //   y = g^H(c1)
             //   z = y^x
-            BigInteger derivedBase = group.pow(group.g, FiatShamir.hashToZq(group.q, c1));
+            BigInteger derivedBase = group.pow(group.g,
+                    FiatShamir.hashToZq(group.q, DomainTags.BIT_DECOMPOSITION_BASE, c1));
             BigInteger derivedPublicKey = group.pow(derivedBase, witness.secretKey());
 
             // c2 = h^r · g^bit · z
@@ -154,6 +156,7 @@ public class BitDecompositionRangeProver implements RangeProver {
         // Total challenge is fixed via Fiat-Shamir; real branch takes its share
         BigInteger totalChallenge = FiatShamir.hashToZq(
                 group.q,
+                DomainTags.OR_PROOF_CHALLENGE,
                 group.g, publicKey, c1, c2, z,
                 commitments[0], responses[0],
                 commitments[1], responses[1]
