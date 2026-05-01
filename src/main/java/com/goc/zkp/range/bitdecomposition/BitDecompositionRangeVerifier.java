@@ -53,7 +53,7 @@ public class BitDecompositionRangeVerifier implements RangeVerifier {
 
             BigInteger derivedPublicKey = keyProofs[i].b();
 
-            if (!equalityVerifier.verify(keyProofs[i], group.g, c1, derivedBase, derivedPublicKey)) return false;
+            if (!equalityVerifier.verify(keyProofs[i], group.g, derivedBase, publicKey, derivedPublicKey)) return false;
             if (!verifyBitIsZeroOrOne(bitProofs[i], encryptedBits[i], derivedPublicKey)) return false;
         }
 
