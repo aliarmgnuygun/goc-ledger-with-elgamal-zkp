@@ -27,6 +27,10 @@ public class Ledger {
             return false;
         }
 
+        if (!amount.equals(proof.getEncryptedValue())) {
+            return false;
+        }
+        
         if (matrix[sender][receiver] == null) {
             matrix[sender][receiver] = amount;
         } else {
