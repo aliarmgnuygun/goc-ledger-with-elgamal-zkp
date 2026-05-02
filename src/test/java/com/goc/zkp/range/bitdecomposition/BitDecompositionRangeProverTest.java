@@ -5,9 +5,7 @@ import com.goc.core.CryptoGroup;
 import com.goc.crypto.Crypto;
 import com.goc.zkp.range.RangeProof;
 import com.goc.zkp.range.RangeWitness;
-import com.goc.zkp.range.bitdecomposition.BitDecompositionRangeProver;
-import com.goc.zkp.range.bitdecomposition.BitDecompositionRangeVerifier;
-import com.goc.zkp.range.bitdecomposition.OrProof;
+import com.goc.zkp.range.equality.EqualityProof;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -141,5 +139,25 @@ class BitDecompositionRangeProverTest {
         );
 
         assertThat(verifier.verify(corruptedProof)).isFalse();
+    }
+
+    @Test
+    void manipulatedEqualityKeyProof_shouldBeRejected() {
+        var witness = new RangeWitness(BigInteger.valueOf(10), secretKey, publicKey);
+        var proof = prover.prove(witness);
+
+        // Tamper with the derived key (Chaum-Pedersen) proof of the first bit
+        EqualityProof originalKeyProof = proof.getKeyProofs()[0];
+        proof.getKeyProofs()[0] = new EqualityProof(
+                originalKeyProof.g1(),
+                originalKeyProof.g2(),
+                originalKeyProof.a(),
+                originalKeyProof.b(),
+                originalKeyProof.commitmentK1().add(BigInteger.ONE), // TAMPERED!
+                originalKeyProof.commitmentK2(),
+                originalKeyProof.responseZ()
+        );
+
+        assertThat(verifier.verify(proof)).isFalse();
     }
 }

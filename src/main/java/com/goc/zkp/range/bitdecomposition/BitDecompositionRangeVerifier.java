@@ -121,8 +121,7 @@ public class BitDecompositionRangeVerifier implements RangeVerifier {
         BigInteger c1 = ciphertext.c1;
         BigInteger c2 = ciphertext.c2;
 
-        BigInteger normalizedC2 = group.mul(c2, group.inverse(derivedPublicKey));
-        BigInteger normalizedC2IfOne = group.mul(normalizedC2, group.inverse(group.g));
+        BigInteger normalizedC2IfOne = group.mul(c2, group.inverse(group.g));
 
         // Challenge sum check
         BigInteger totalChallenge = FiatShamir.hashToZq(
@@ -142,7 +141,7 @@ public class BitDecompositionRangeVerifier implements RangeVerifier {
 
         // Branch 0: h^z0 == d0 · (c2')^e0
         if (!group.pow(publicKey, proof.responseZ0()).equals(
-                group.mul(proof.commitmentD0(), group.pow(normalizedC2, proof.challengeE0())))) return false;
+                group.mul(proof.commitmentD0(), group.pow(c2, proof.challengeE0())))) return false;
 
         // Branch 1: g^z1 == a1 · c1^e1
         if (!group.pow(group.g, proof.responseZ1()).equals(

@@ -63,13 +63,10 @@ public class BitDecompositionRangeProver implements RangeProver {
                     FiatShamir.hashToZq(group.q, DomainTags.BIT_DECOMPOSITION_BASE, c1));
             BigInteger derivedPublicKey = group.pow(derivedBase, witness.secretKey());
 
-            // c2 = h^r · g^bit · z
+            // c2 = h^r · g^bit
             BigInteger c2 = group.mul(
-                    group.mul(
-                            group.pow(witness.publicKey(), randomness),
-                            group.pow(group.g, BigInteger.valueOf(bit))
-                    ),
-                    derivedPublicKey
+                    group.pow(witness.publicKey(), randomness),
+                    group.pow(group.g, BigInteger.valueOf(bit))
             );
 
             Ciphertext ciphertext = new Ciphertext(c1, c2);
@@ -114,12 +111,8 @@ public class BitDecompositionRangeProver implements RangeProver {
     ) {
         BigInteger c1 = ciphertext.c1;
         BigInteger c2 = ciphertext.c2;
-        BigInteger z = derivedPublicKey;
 
-        // Strip z contribution from the ciphertext: c2' = c2 / z
-        // c2' now behaves like a standard ElGamal ciphertext.
-        BigInteger normalizedC2 = group.mul(c2, group.inverse(z));
-        BigInteger normalizedC2IfOne = group.mul(normalizedC2, group.inverse(group.g));
+        BigInteger normalizedC2IfOne = group.mul(c2, group.inverse(group.g));
 
         int realIndex = bit;
         int fakeIndex = 1 - bit;
@@ -127,7 +120,7 @@ public class BitDecompositionRangeProver implements RangeProver {
         // Target ciphertext for the fake branch:
         //   fakeBit=0 → normalizedC2       (act as if bit=0 was encrypted)
         //   fakeBit=1 → normalizedC2IfOne  (act as if bit=1 was encrypted)
-        BigInteger fakeTarget = (fakeIndex == 0) ? normalizedC2 : normalizedC2IfOne;
+        BigInteger fakeTarget = (fakeIndex == 0) ? c2 : normalizedC2IfOne;
 
         BigInteger[] commitments = new BigInteger[2];
         BigInteger[] responses = new BigInteger[2];
@@ -157,7 +150,7 @@ public class BitDecompositionRangeProver implements RangeProver {
         BigInteger totalChallenge = FiatShamir.hashToZq(
                 group.q,
                 DomainTags.OR_PROOF_CHALLENGE,
-                group.g, publicKey, c1, c2, z,
+                group.g, publicKey, c1, c2, derivedPublicKey,
                 commitments[0], responses[0],
                 commitments[1], responses[1]
         );

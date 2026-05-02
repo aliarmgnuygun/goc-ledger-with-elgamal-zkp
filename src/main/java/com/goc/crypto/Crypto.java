@@ -17,14 +17,14 @@ public class Crypto {
     }
 
     public KeyPair keyGen() {
-        BigInteger x = new BigInteger(group.g.bitLength(), random).mod(group.q);
+        BigInteger x = new BigInteger(group.q.bitLength(), random).mod(group.q);
         BigInteger h = group.pow(group.g, x);
         return new KeyPair(x, h);
     }
 
     // Additive (exponential) ElGamal
     public Ciphertext encrypt(BigInteger m, BigInteger publicKey) {
-        BigInteger r = new BigInteger(group.g.bitLength(), random).mod(group.q); // random number r
+        BigInteger r = new BigInteger(group.q.bitLength(), random).mod(group.q);
 
         BigInteger c1 = group.pow(group.g, r);
         BigInteger c2 = group.mul(

@@ -24,6 +24,8 @@ class LedgerIntegrationTest {
     private BigInteger publicKey;
     private CryptoGroup group;
 
+    private final int BIT_LENGTH = 4;
+
     @BeforeEach
     void setUp() {
         BigInteger p = new BigInteger("23");
@@ -37,9 +39,8 @@ class LedgerIntegrationTest {
         secretKey = keyPair.secretKey;
         publicKey = keyPair.publicKey;
 
-        int bitLength = 4;
-        prover = new BitDecompositionRangeProver(group, crypto, bitLength);
-        var verifier = new BitDecompositionRangeVerifier(group, publicKey, bitLength);
+        prover = new BitDecompositionRangeProver(group, crypto, BIT_LENGTH);
+        var verifier = new BitDecompositionRangeVerifier(group, publicKey, BIT_LENGTH);
 
         ledger = new Ledger(group, 3, verifier);
     }
@@ -139,7 +140,8 @@ class LedgerIntegrationTest {
 
         Ciphertext state = ledger.getEntry(0, 2);
         BigInteger decrypted = crypto.decryptToGroupElement(state, secretKey);
-        BigInteger value = crypto.bruteForceLog(decrypted, 15);
+        int maxPossible = (1 << BIT_LENGTH) * 2;
+        BigInteger value = crypto.bruteForceLog(decrypted, maxPossible);
 
         assertThat(value).isEqualTo(BigInteger.valueOf(7));
     }
@@ -158,6 +160,26 @@ class LedgerIntegrationTest {
         var wrongLedger   = new Ledger(group, 3, wrongVerifier);
 
         boolean accepted = wrongLedger.submitTransaction(0, 1, proof.getEncryptedValue(), proof);
+
+        assertThat(accepted).isFalse();
+    }
+
+    // -------------------------------------------------------------------------
+    // RANGE PROOF FAILURE
+    // -------------------------------------------------------------------------
+
+    @Test
+    void should_reject_invalid_proof() {
+        var witness = new RangeWitness(BigInteger.valueOf(5), secretKey, publicKey);
+        var proof   = prover.prove(witness);
+
+        // Break first bit ciphertext
+        proof.getEncryptedBits()[0] = new Ciphertext(
+                proof.getEncryptedBits()[0].c1.add(BigInteger.ONE),
+                proof.getEncryptedBits()[0].c2
+        );
+
+        boolean accepted = ledger.submitTransaction(0, 1, proof.getEncryptedValue(), proof);
 
         assertThat(accepted).isFalse();
     }
