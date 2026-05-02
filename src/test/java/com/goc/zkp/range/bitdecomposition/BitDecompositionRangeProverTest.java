@@ -1,4 +1,4 @@
-package zkp.range.bitdecomposition;
+package com.goc.zkp.range.bitdecomposition;
 
 import com.goc.core.Ciphertext;
 import com.goc.core.CryptoGroup;

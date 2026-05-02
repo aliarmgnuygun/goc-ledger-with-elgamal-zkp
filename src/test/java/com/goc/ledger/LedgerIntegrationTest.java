@@ -1,4 +1,4 @@
-package ledger;
+package com.goc.ledger;
 
 import com.goc.core.Ciphertext;
 import com.goc.core.CryptoGroup;
