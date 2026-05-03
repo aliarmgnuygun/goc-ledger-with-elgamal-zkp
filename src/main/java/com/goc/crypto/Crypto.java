@@ -6,6 +6,8 @@ import com.goc.core.KeyPair;
 
 import java.math.BigInteger;
 import java.security.SecureRandom;
+import java.util.HashMap;
+import java.util.Map;
 
 public class Crypto {
 
@@ -52,6 +54,38 @@ public class Crypto {
             current = group.mul(current, group.g);
         }
         throw new IllegalArgumentException("Discrete log not found");
+    }
+
+    public BigInteger babyStepGiantStepLog(BigInteger gm, int maxMessage, CryptoGroup group) {
+        // 1. Determine step size (m): m = ceil(sqrt(maxMessage))
+        int m = (int) Math.ceil(Math.sqrt(maxMessage));
+        Map<BigInteger, Integer> babySteps = new HashMap<>();
+
+        // 2. Compute Baby Steps: Store (g^j, j) in a hash map for memory phase
+        BigInteger current = BigInteger.ONE; // g^0
+        for (int j = 0; j < m; j++) {
+            babySteps.putIfAbsent(current, j);
+            current = group.mul(current, group.g);
+        }
+
+        // 3. Calculate Giant Step multiplier (c): c = (g^m)^(-1) mod p
+        BigInteger mBig = BigInteger.valueOf(m);
+        BigInteger gToM = group.pow(group.g, mBig);
+        BigInteger c = group.inverse(gToM);
+
+        // 4. Giant Steps: Search for a match in the hash map (search phase)
+        BigInteger target = gm;
+        for (int i = 0; i <= m; i++) {
+            if (babySteps.containsKey(target)) {
+                // Match found: x = i * m + j
+                long x = (long) i * m + babySteps.get(target);
+                return BigInteger.valueOf(x);
+            }
+            // Move to the next giant step: target = target * c mod p
+            target = group.mul(target, c);
+        }
+
+        throw new IllegalArgumentException("Discrete log not found within the maxMessage bound");
     }
 
     public BigInteger generateRandomness() {

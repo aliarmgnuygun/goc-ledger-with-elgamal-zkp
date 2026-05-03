@@ -141,7 +141,7 @@ class LedgerIntegrationTest {
         Ciphertext state = ledger.getEntry(0, 2);
         BigInteger decrypted = crypto.decryptToGroupElement(state, secretKey);
         int maxPossible = (1 << BIT_LENGTH) * 2;
-        BigInteger value = crypto.bruteForceLog(decrypted, maxPossible);
+        BigInteger value = crypto.babyStepGiantStepLog(decrypted, maxPossible, group);
 
         assertThat(value).isEqualTo(BigInteger.valueOf(7));
     }
