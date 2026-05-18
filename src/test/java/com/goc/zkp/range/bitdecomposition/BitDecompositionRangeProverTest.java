@@ -19,6 +19,7 @@ class BitDecompositionRangeProverTest {
     private BitDecompositionRangeProver prover;
     private BitDecompositionRangeVerifier verifier;
     private BigInteger publicKey;
+    private BigInteger secretKey;
 
     @BeforeEach
     void setUp() {
@@ -31,6 +32,7 @@ class BitDecompositionRangeProverTest {
 
         var keyPair = crypto.keyGen();
         publicKey   = keyPair.publicKey;
+        secretKey   = keyPair.secretKey;
 
         prover   = new BitDecompositionRangeProver(group, crypto, 4);
         verifier = new BitDecompositionRangeVerifier(group, publicKey, 4);
@@ -38,7 +40,7 @@ class BitDecompositionRangeProverTest {
 
     @Test
     void validValue_shouldProduceVerifiableProof() {
-        var witness = new RangeWitness(BigInteger.valueOf(6), publicKey);
+        var witness = new RangeWitness(BigInteger.valueOf(6), secretKey, publicKey);
         var proof   = prover.prove(witness);
 
         assertThat(verifier.verify(proof)).isTrue();
@@ -46,7 +48,7 @@ class BitDecompositionRangeProverTest {
 
     @Test
     void zero_shouldProduceVerifiableProof() {
-        var witness = new RangeWitness(BigInteger.ZERO, publicKey);
+        var witness = new RangeWitness(BigInteger.ZERO, secretKey, publicKey);
         var proof   = prover.prove(witness);
 
         assertThat(verifier.verify(proof)).isTrue();
@@ -54,7 +56,7 @@ class BitDecompositionRangeProverTest {
 
     @Test
     void maxValue_shouldProduceVerifiableProof() {
-        var witness = new RangeWitness(BigInteger.valueOf(15), publicKey);
+        var witness = new RangeWitness(BigInteger.valueOf(15), secretKey, publicKey);
         var proof   = prover.prove(witness);
 
         assertThat(verifier.verify(proof)).isTrue();
@@ -62,7 +64,7 @@ class BitDecompositionRangeProverTest {
 
     @Test
     void negativeValue_shouldThrowException() {
-        var witness = new RangeWitness(BigInteger.valueOf(-1), publicKey);
+        var witness = new RangeWitness(BigInteger.valueOf(-1), secretKey, publicKey);
 
         assertThatThrownBy(() -> prover.prove(witness))
                 .isInstanceOf(IllegalArgumentException.class);
@@ -70,7 +72,7 @@ class BitDecompositionRangeProverTest {
 
     @Test
     void outOfRangeValue_shouldThrowException() {
-        var witness = new RangeWitness(BigInteger.valueOf(16), publicKey);
+        var witness = new RangeWitness(BigInteger.valueOf(16), secretKey, publicKey);
 
         assertThatThrownBy(() -> prover.prove(witness))
                 .isInstanceOf(IllegalArgumentException.class);
@@ -78,7 +80,7 @@ class BitDecompositionRangeProverTest {
 
     @Test
     void manipulatedChallenge_shouldBeRejected() {
-        var witness = new RangeWitness(BigInteger.valueOf(5), publicKey);
+        var witness = new RangeWitness(BigInteger.valueOf(5), secretKey, publicKey);
         var proof   = prover.prove(witness);
 
         OrProof original = proof.getBitProofs()[0];
@@ -97,7 +99,7 @@ class BitDecompositionRangeProverTest {
 
     @Test
     void wrongPublicKey_shouldBeRejected() {
-        var witness = new RangeWitness(BigInteger.valueOf(5), publicKey);
+        var witness = new RangeWitness(BigInteger.valueOf(5), secretKey, publicKey);
         var proof   = prover.prove(witness);
 
         // Toy parameters (q = 11) allow occasional hash-mod-q collisions
@@ -119,7 +121,7 @@ class BitDecompositionRangeProverTest {
 
     @Test
     void bitLengthMismatch_shouldBeRejected() {
-        var witness      = new RangeWitness(BigInteger.valueOf(5), publicKey);
+        var witness      = new RangeWitness(BigInteger.valueOf(5), secretKey, publicKey);
         var proof        = prover.prove(witness);
         var longVerifier = new BitDecompositionRangeVerifier(group, publicKey, 8);
 
@@ -128,7 +130,7 @@ class BitDecompositionRangeProverTest {
 
     @Test
     void manipulatedAggregatedValue_shouldBeRejected() {
-        var witness = new RangeWitness(BigInteger.valueOf(7), publicKey);
+        var witness = new RangeWitness(BigInteger.valueOf(7), secretKey, publicKey);
         var proof   = prover.prove(witness);
 
         var corruptedValue = new Ciphertext(
@@ -140,6 +142,7 @@ class BitDecompositionRangeProverTest {
                 proof.getBitCommitments(),
                 proof.getBitProofs(),
                 corruptedValue,
+                proof.getBindingProof(),
                 proof.getBitLength()
         );
 
@@ -147,8 +150,55 @@ class BitDecompositionRangeProverTest {
     }
 
     @Test
+    void manipulatedBindingProof_shouldBeRejected() {
+        var witness = new RangeWitness(BigInteger.valueOf(5), secretKey, publicKey);
+        var proof   = prover.prove(witness);
+
+        BindingProof original = proof.getBindingProof();
+        BindingProof tampered = new BindingProof(
+                original.R(),
+                original.commitmentK1(),
+                original.commitmentK2(),
+                original.responseS().add(BigInteger.ONE)
+        );
+
+        var tamperedProof = new RangeProof(
+                proof.getBitCommitments(),
+                proof.getBitProofs(),
+                proof.getEncryptedValue(),
+                tampered,
+                proof.getBitLength()
+        );
+
+        assertThat(verifier.verify(tamperedProof)).isFalse();
+    }
+
+    @Test
+    void bindingProofFromDifferentSender_shouldBeRejected() {
+        // Forge: build a proof using attacker's own secret key but the victim's public key.
+        var victimWitness = new RangeWitness(BigInteger.valueOf(5), secretKey, publicKey);
+        var legitimate    = prover.prove(victimWitness);
+
+        var attacker = crypto.keyGen();
+        var attackerWitness = new RangeWitness(BigInteger.valueOf(5),
+                attacker.secretKey, attacker.publicKey);
+        var attackerProof   = prover.prove(attackerWitness);
+
+        // Splice the attacker's binding proof onto the legitimate ciphertext.
+        var spliced = new RangeProof(
+                legitimate.getBitCommitments(),
+                legitimate.getBitProofs(),
+                legitimate.getEncryptedValue(),
+                attackerProof.getBindingProof(),
+                legitimate.getBitLength()
+        );
+
+        assertThat(verifier.verify(spliced)).isFalse();
+    }
+
+    @Test
     void manipulatedBitCommitment_shouldBeRejected() {
-        var witness = new RangeWitness(BigInteger.valueOf(10), publicKey);
+        var witness = new RangeWitness(BigInteger.valueOf(10), secretKey, publicKey);
         var proof   = prover.prove(witness);
 
         proof.getBitCommitments()[0] = proof.getBitCommitments()[0].add(BigInteger.ONE);

@@ -50,7 +50,7 @@ class LedgerIntegrationTest {
 
     @Test
     void should_accept_valid_transaction_and_store_ciphertext() {
-        var witness = new RangeWitness(BigInteger.valueOf(5), publicKey);
+        var witness = new RangeWitness(BigInteger.valueOf(5), secretKey, publicKey);
         var proof   = prover.prove(witness);
 
         boolean accepted = ledger.submitTransaction(0, 1, proof.getEncryptedValue(), proof);
@@ -65,7 +65,7 @@ class LedgerIntegrationTest {
 
     @Test
     void should_reject_transaction_when_ciphertext_does_not_match_proof() {
-        var witness = new RangeWitness(BigInteger.valueOf(5), publicKey);
+        var witness = new RangeWitness(BigInteger.valueOf(5), secretKey, publicKey);
         var proof   = prover.prove(witness);
 
         Ciphertext fake = crypto.encrypt(BigInteger.valueOf(10), publicKey);
@@ -81,7 +81,7 @@ class LedgerIntegrationTest {
 
     @Test
     void should_reject_when_proof_is_tampered() {
-        var witness = new RangeWitness(BigInteger.valueOf(6), publicKey);
+        var witness = new RangeWitness(BigInteger.valueOf(6), secretKey, publicKey);
         var proof   = prover.prove(witness);
 
         RangeProof tampered = new RangeProof(
@@ -91,6 +91,7 @@ class LedgerIntegrationTest {
                         proof.getEncryptedValue().c1,
                         proof.getEncryptedValue().c2.add(BigInteger.ONE)
                 ),
+                proof.getBindingProof(),
                 proof.getBitLength()
         );
 
@@ -105,7 +106,7 @@ class LedgerIntegrationTest {
 
     @Test
     void should_reject_replay_attack_using_same_proof_with_different_ciphertext() {
-        var witness = new RangeWitness(BigInteger.valueOf(4), publicKey);
+        var witness = new RangeWitness(BigInteger.valueOf(4), secretKey, publicKey);
         var proof   = prover.prove(witness);
 
         boolean first = ledger.submitTransaction(0, 2, proof.getEncryptedValue(), proof);
@@ -124,11 +125,11 @@ class LedgerIntegrationTest {
 
     @Test
     void should_accumulate_encrypted_values_homomorphically() {
-        var w1 = new RangeWitness(BigInteger.valueOf(3), publicKey);
+        var w1 = new RangeWitness(BigInteger.valueOf(3), secretKey, publicKey);
         var p1 = prover.prove(w1);
         ledger.submitTransaction(0, 2, p1.getEncryptedValue(), p1);
 
-        var w2 = new RangeWitness(BigInteger.valueOf(4), publicKey);
+        var w2 = new RangeWitness(BigInteger.valueOf(4), secretKey, publicKey);
         var p2 = prover.prove(w2);
         ledger.submitTransaction(0, 2, p2.getEncryptedValue(), p2);
 
@@ -146,7 +147,7 @@ class LedgerIntegrationTest {
 
     @Test
     void should_reject_transaction_with_wrong_public_key() {
-        var witness = new RangeWitness(BigInteger.valueOf(5), publicKey);
+        var witness = new RangeWitness(BigInteger.valueOf(5), secretKey, publicKey);
         var proof   = prover.prove(witness);
 
         var anotherKeyPair = crypto.keyGen();
@@ -164,7 +165,7 @@ class LedgerIntegrationTest {
 
     @Test
     void should_reject_invalid_proof() {
-        var witness = new RangeWitness(BigInteger.valueOf(5), publicKey);
+        var witness = new RangeWitness(BigInteger.valueOf(5), secretKey, publicKey);
         var proof   = prover.prove(witness);
 
         // Corrupt the first bit's Pedersen commitment

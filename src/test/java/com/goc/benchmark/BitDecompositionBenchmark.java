@@ -112,10 +112,10 @@ public class BitDecompositionBenchmark {
 
         BigInteger max = BigInteger.TWO.pow(bitLength).subtract(BigInteger.ONE);
 
-        witnessNormal = new RangeWitness(BigInteger.valueOf(5), publicKey);
-        witnessZero = new RangeWitness(BigInteger.ZERO, publicKey);
-        witnessMax = new RangeWitness(max, publicKey);
-        witnessOver = new RangeWitness(BigInteger.TWO.pow(bitLength), publicKey);
+        witnessNormal = new RangeWitness(BigInteger.valueOf(5), secretKey, publicKey);
+        witnessZero = new RangeWitness(BigInteger.ZERO, secretKey, publicKey);
+        witnessMax = new RangeWitness(max, secretKey, publicKey);
+        witnessOver = new RangeWitness(BigInteger.TWO.pow(bitLength), secretKey, publicKey);
 
         // Precompute valid proofs for verifier benchmarks
         proofNormal = prover.prove(witnessNormal);
@@ -273,6 +273,7 @@ public class BitDecompositionBenchmark {
                 commitments,
                 original.getBitProofs(),
                 original.getEncryptedValue(),
+                original.getBindingProof(),
                 original.getBitLength()
         );
     }
