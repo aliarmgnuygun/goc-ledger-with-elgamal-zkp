@@ -14,10 +14,4 @@ public final class DomainTags {
 
     public static final byte[] OR_PROOF_CHALLENGE =
             "OR_PROOF_CHALLENGE".getBytes();
-
-    public static final byte[] EQUALITY_PROOF_CHALLENGE =
-            "EQUALITY_PROOF_CHALLENGE".getBytes();
-
-    public static final byte[] BIT_DECOMPOSITION_BASE =
-            "BIT_DECOMPOSITION_BASE".getBytes();
 }
