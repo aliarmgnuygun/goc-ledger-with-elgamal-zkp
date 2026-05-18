@@ -3,12 +3,13 @@ package com.goc.zkp.range;
 import java.math.BigInteger;
 
 /**
- * Witness for the range proof.
+ * Witness for the Enc_update-bound range proof.
  *
- * The prover generates ElGamal randomness internally and exposes the
- * resulting ciphertext via {@link RangeProof#getEncryptedValue()}.
+ * The prover needs the secret key to produce the Chaum-Pedersen binding
+ * proof attached to the ciphertext (sender authentication).
  */
 public record RangeWitness(
         BigInteger value,
+        BigInteger secretKey,
         BigInteger publicKey
 ) {}

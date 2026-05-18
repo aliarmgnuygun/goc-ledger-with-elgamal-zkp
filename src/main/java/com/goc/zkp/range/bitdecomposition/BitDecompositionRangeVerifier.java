@@ -1,5 +1,6 @@
 package com.goc.zkp.range.bitdecomposition;
 
+import com.goc.core.Ciphertext;
 import com.goc.core.CryptoGroup;
 import com.goc.crypto.DomainTags;
 import com.goc.crypto.FiatShamir;
@@ -9,16 +10,17 @@ import com.goc.zkp.range.RangeVerifier;
 import java.math.BigInteger;
 
 /**
- * Verifies a Pedersen-based bit-decomposition range proof.
+ * Verifies a Pedersen-based bit-decomposition range proof over an
+ * Enc_update ciphertext.
  *
  * Checks:
  *   1. Proof dimensions match the configured bit length.
- *   2. Each commitment opens to 0 or 1 (OR-proof).
- *   3. Aggregated commitment matches the c2 component of the
- *      encrypted value: Π commit_i^{2^i} == encryptedValue.c2.
- *
- * The verifier never decrypts the encrypted value; it only checks that
- * c2 is well-formed as g^v · h^r with v ∈ [0, 2^k).
+ *   2. Each Pedersen commitment opens to 0 or 1 (OR-proof).
+ *   3. Aggregated commitment matches c2 of the encrypted value:
+ *      Π commit_i^{2^i} == encryptedValue.c2.
+ *   4. Enc_update structure: c1 = R · g^{H(R)}.
+ *   5. Chaum-Pedersen binding proof: g^x = h ∧ y^x = z,
+ *      where y = g^{H(R)}, z = h^{H(R)}.
  */
 public class BitDecompositionRangeVerifier implements RangeVerifier {
 
@@ -45,13 +47,15 @@ public class BitDecompositionRangeVerifier implements RangeVerifier {
             if (!verifyBitIsZeroOrOne(bitProofs[i])) return false;
         }
 
-        return verifyAggregation(proof);
+        if (!verifyAggregation(proof)) return false;
+        return verifyBinding(proof);
     }
 
     private boolean validateDimensions(RangeProof proof) {
         return proof.getBitLength() == bitLength
                 && proof.getBitCommitments().length == bitLength
-                && proof.getBitProofs().length == bitLength;
+                && proof.getBitProofs().length == bitLength
+                && proof.getBindingProof() != null;
     }
 
     /**
@@ -59,7 +63,6 @@ public class BitDecompositionRangeVerifier implements RangeVerifier {
      */
     private boolean verifyAggregation(RangeProof proof) {
         BigInteger[] commitments = proof.getBitCommitments();
-
         BigInteger acc = commitments[0];
         for (int i = 1; i < bitLength; i++) {
             BigInteger weight = BigInteger.ONE.shiftLeft(i);
@@ -93,5 +96,43 @@ public class BitDecompositionRangeVerifier implements RangeVerifier {
         BigInteger lhs1 = group.pow(publicKey, proof.z1());
         BigInteger rhs1 = group.mul(proof.a1(), group.pow(target1, proof.c1()));
         return lhs1.equals(rhs1);
+    }
+
+    /**
+     * Checks Enc_update consistency and the Chaum-Pedersen binding proof.
+     *
+     *   y      = g^{H(R)}
+     *   z      = h^{H(R)}         (publicly recomputable; binds to (h, R))
+     *   c1     == R · y           (ciphertext consistent with R)
+     *   c      = H(... g, h, y, z, R, c1, c2, K1, K2)
+     *   g^s    == K1 · h^c
+     *   y^s    == K2 · z^c
+     */
+    private boolean verifyBinding(RangeProof proof) {
+        BindingProof bp = proof.getBindingProof();
+        Ciphertext ct = proof.getEncryptedValue();
+        BigInteger R = bp.R();
+
+        BigInteger yExp = FiatShamir.hashToZq(group.q, DomainTags.ENC_UPDATE_DERIVE, R);
+        BigInteger y = group.pow(group.g, yExp);
+        BigInteger z = group.pow(publicKey, yExp);
+
+        if (!group.mul(R, y).equals(ct.c1)) return false;
+
+        BigInteger challenge = FiatShamir.hashToZq(
+                group.q,
+                DomainTags.BINDING_PROOF_CHALLENGE,
+                group.g, publicKey, y, z, R,
+                ct.c1, ct.c2,
+                bp.commitmentK1(), bp.commitmentK2()
+        );
+
+        BigInteger lhsG = group.pow(group.g, bp.responseS());
+        BigInteger rhsG = group.mul(bp.commitmentK1(), group.pow(publicKey, challenge));
+        if (!lhsG.equals(rhsG)) return false;
+
+        BigInteger lhsY = group.pow(y, bp.responseS());
+        BigInteger rhsY = group.mul(bp.commitmentK2(), group.pow(z, challenge));
+        return lhsY.equals(rhsY);
     }
 }
