@@ -8,184 +8,150 @@ import com.goc.crypto.FiatShamir;
 import com.goc.zkp.range.RangeProof;
 import com.goc.zkp.range.RangeProver;
 import com.goc.zkp.range.RangeWitness;
-import com.goc.zkp.range.equality.EqualityProof;
-import com.goc.zkp.range.equality.EqualityProver;
-import com.goc.zkp.range.equality.EqualityWitness;
 
 import java.math.BigInteger;
 
 /**
- * Produces a range proof via bit decomposition.
- * <p>
- * Proves that a value lies in [0, 2^bitLength) without revealing it.
- * Each bit is encrypted individually:
- * - ChaumPedersenProof: proves correctness of the derived key
- * - OrProof:            proves the encrypted bit is 0 or 1
- * <p>
- * All bits are combined with powers-of-two weights to recover
- * an encryption of the original value: Enc(v) = ∏ Enc(bit_i)^(2^i)
+ * Produces a range proof via bit decomposition over Pedersen commitments.
+ *
+ * For a value v ∈ [0, 2^k) the prover outputs:
+ *   - k Pedersen commitments  commit_i = g^{b_i} · h^{r_i}
+ *   - k OR-proofs that each commit_i opens to 0 or 1
+ *   - the ElGamal ciphertext  Enc(v) = (g^r, g^v · h^r)
+ *
+ * Randomness for the lowest bit is forced so that aggregation matches
+ * the encryption randomness:
+ *   r_0 = r − Σ_{i=1..k-1} r_i · 2^i   (mod q)
+ * giving  Π commit_i^{2^i} = g^v · h^r = c2.
+ *
+ * The prover does NOT need the secret key — only the public key. The
+ * owner can later decrypt the encrypted value with their secret key.
  */
 public class BitDecompositionRangeProver implements RangeProver {
 
     private final CryptoGroup group;
     private final Crypto crypto;
     private final int bitLength;
-    private final EqualityProver equalityProver;
 
     public BitDecompositionRangeProver(CryptoGroup group, Crypto crypto, int bitLength) {
         if (bitLength <= 0) throw new IllegalArgumentException("bitLength must be positive");
         this.group = group;
         this.crypto = crypto;
         this.bitLength = bitLength;
-        this.equalityProver = new EqualityProver(group, crypto);
     }
 
     @Override
     public RangeProof prove(RangeWitness witness) {
         validateRange(witness.value());
 
-        Ciphertext[] encryptedBits = new Ciphertext[bitLength];
-        OrProof[] bitProofs = new OrProof[bitLength];
-        EqualityProof[] keyProofs = new EqualityProof[bitLength];
+        BigInteger h = witness.publicKey();
+        BigInteger r = crypto.generateRandomness();
+
+        BigInteger[] bitRandomness = pickBitRandomness(r);
+        BigInteger[] commitments   = new BigInteger[bitLength];
+        OrProof[]    bitProofs     = new OrProof[bitLength];
 
         for (int i = 0; i < bitLength; i++) {
             int bit = witness.value().testBit(i) ? 1 : 0;
-            BigInteger randomness = crypto.generateRandomness();
-
-            // c1 = g^r
-            BigInteger c1 = group.pow(group.g, randomness);
-
-            // A unique (y, z) pair is derived from c1 for each bit —
-            // prevents the same key from being reused across different bits (replay protection)
-            //   y = g^H(c1)
-            //   z = y^x
-            BigInteger derivedBase = group.pow(group.g,
-                    FiatShamir.hashToZq(group.q, DomainTags.BIT_DECOMPOSITION_BASE, c1));
-            BigInteger derivedPublicKey = group.pow(derivedBase, witness.secretKey());
-
-            // c2 = h^r · g^bit
-            BigInteger c2 = group.mul(
-                    group.pow(witness.publicKey(), randomness),
-                    group.pow(group.g, BigInteger.valueOf(bit))
-            );
-
-            Ciphertext ciphertext = new Ciphertext(c1, c2);
-            encryptedBits[i] = ciphertext;
-            keyProofs[i] = equalityProver.prove(new EqualityWitness(
-                    witness.secretKey(), // x
-                    group.g,             // g1
-                    derivedBase,         // g2 = y
-                    witness.publicKey(), // a  = h = g^x
-                    derivedPublicKey     // b  = z = y^x
-            ));
-            bitProofs[i] = proveBitIsZeroOrOne(bit, randomness, ciphertext,
-                    witness.publicKey(), derivedPublicKey);
+            commitments[i] = pedersenCommit(bit, bitRandomness[i], h);
+            bitProofs[i]   = proveBitIsZeroOrOne(bit, bitRandomness[i], commitments[i], h);
         }
 
-        Ciphertext encryptedValue = aggregateBits(encryptedBits);
-        return new RangeProof(encryptedBits, bitProofs, keyProofs, encryptedValue, bitLength);
+        Ciphertext encryptedValue = new Ciphertext(
+                group.pow(group.g, r),
+                aggregate(commitments)
+        );
+        return new RangeProof(commitments, bitProofs, encryptedValue, bitLength);
     }
 
     /**
-     * Proves that the encrypted bit is either 0 or 1, without revealing which.
-     * <p>
-     * Two branches (bit=0 and bit=1) produce commitments:
-     * - Real branch:  standard sigma commitment using the known randomness.
-     * - Fake branch:  challenge and response are chosen randomly upfront;
-     * the commitment is back-computed from the verification equation.
-     * <p>
-     * The total challenge is fixed via Fiat-Shamir and split between branches:
-     * e_real = totalChallenge - e_fake  (mod q)
-     * <p>
-     * The verifier checks:
-     * e[0] + e[1] == H(...)                    (challenge sum)
-     * g^z[i]      == commitment[i] · c1^e[i]   (c1 consistency)
-     * h^z[i]      == response[i]  · t[i]^e[i]  (c2 consistency)
+     * Picks r_1 .. r_{k-1} uniformly and forces r_0 so that
+     * Σ r_i · 2^i ≡ r  (mod q).
      */
-    private OrProof proveBitIsZeroOrOne(
-            int bit,
-            BigInteger randomness,
-            Ciphertext ciphertext,
-            BigInteger publicKey,
-            BigInteger derivedPublicKey
-    ) {
-        BigInteger c1 = ciphertext.c1;
-        BigInteger c2 = ciphertext.c2;
+    private BigInteger[] pickBitRandomness(BigInteger r) {
+        BigInteger[] bitRandomness = new BigInteger[bitLength];
+        BigInteger weightedSum = BigInteger.ZERO;
+        for (int i = 1; i < bitLength; i++) {
+            bitRandomness[i] = crypto.generateRandomness();
+            weightedSum = weightedSum.add(bitRandomness[i].shiftLeft(i)).mod(group.q);
+        }
+        bitRandomness[0] = r.subtract(weightedSum).mod(group.q);
+        return bitRandomness;
+    }
 
-        BigInteger normalizedC2IfOne = group.mul(c2, group.inverse(group.g));
+    private BigInteger pedersenCommit(int bit, BigInteger randomness, BigInteger h) {
+        BigInteger gPart = (bit == 1) ? group.g : BigInteger.ONE;
+        BigInteger hPart = group.pow(h, randomness);
+        return group.mul(gPart, hPart);
+    }
 
-        int realIndex = bit;
-        int fakeIndex = 1 - bit;
+    /**
+     * Standard Pedersen-bit OR-proof (Cramer–Damgård–Schoenmakers).
+     *
+     * Statement: commit = h^r  ∨  commit · g^{-1} = h^r
+     *
+     * - Real branch (b = actual bit): standard sigma commitment using known r.
+     * - Fake branch (1-b): challenge and response chosen at random;
+     *                      sigma commitment back-computed from the
+     *                      verification equation.
+     *
+     * The total challenge is bound via Fiat-Shamir and split between
+     * branches so c0 + c1 ≡ H(g, h, commit, a0, a1) (mod q).
+     */
+    private OrProof proveBitIsZeroOrOne(int bit, BigInteger r,
+                                        BigInteger commitment, BigInteger h) {
+        int real = bit;
+        int fake = 1 - bit;
 
-        // Target ciphertext for the fake branch:
-        //   fakeBit=0 → normalizedC2       (act as if bit=0 was encrypted)
-        //   fakeBit=1 → normalizedC2IfOne  (act as if bit=1 was encrypted)
-        BigInteger fakeTarget = (fakeIndex == 0) ? c2 : normalizedC2IfOne;
+        BigInteger target0 = commitment;
+        BigInteger target1 = group.mul(commitment, group.inverse(group.g));
+        BigInteger fakeTarget = (fake == 0) ? target0 : target1;
 
-        BigInteger[] commitments = new BigInteger[2];
-        BigInteger[] responses = new BigInteger[2];
-        BigInteger[] challenges = new BigInteger[2];
-        BigInteger[] respZ = new BigInteger[2];
+        BigInteger[] a = new BigInteger[2];
+        BigInteger[] c = new BigInteger[2];
+        BigInteger[] z = new BigInteger[2];
 
-        // Real branch — standard sigma commitment
+        // Real branch — fresh sigma commitment
         BigInteger w = crypto.generateRandomness();
-        commitments[realIndex] = group.pow(group.g, w);
-        responses[realIndex] = group.pow(publicKey, w);
+        a[real] = group.pow(h, w);
 
-        // Fake branch — commitment is back-computed from the verification equation:
-        //   commitment = g^fakeResp · c1^(-fakeChallenge)
-        //   response   = h^fakeResp · fakeTarget^(-fakeChallenge)
-        challenges[fakeIndex] = crypto.generateRandomness();
-        respZ[fakeIndex] = crypto.generateRandomness();
-        commitments[fakeIndex] = group.mul(
-                group.pow(group.g, respZ[fakeIndex]),
-                group.inverse(group.pow(c1, challenges[fakeIndex]))
-        );
-        responses[fakeIndex] = group.mul(
-                group.pow(publicKey, respZ[fakeIndex]),
-                group.inverse(group.pow(fakeTarget, challenges[fakeIndex]))
+        // Fake branch — pick (c_fake, z_fake) at random, back-compute a_fake
+        c[fake] = crypto.generateRandomness();
+        z[fake] = crypto.generateRandomness();
+        a[fake] = group.mul(
+                group.pow(h, z[fake]),
+                group.inverse(group.pow(fakeTarget, c[fake]))
         );
 
-        // Total challenge is fixed via Fiat-Shamir; real branch takes its share
-        BigInteger totalChallenge = FiatShamir.hashToZq(
+        // Fiat-Shamir: total challenge fixes the split
+        BigInteger total = FiatShamir.hashToZq(
                 group.q,
                 DomainTags.OR_PROOF_CHALLENGE,
-                group.g, publicKey, c1, c2, derivedPublicKey,
-                commitments[0], responses[0],
-                commitments[1], responses[1]
+                group.g, h, commitment, a[0], a[1]
         );
-        challenges[realIndex] = totalChallenge.subtract(challenges[fakeIndex]).mod(group.q);
-        respZ[realIndex] = w.add(challenges[realIndex].multiply(randomness)).mod(group.q);
+        c[real] = total.subtract(c[fake]).mod(group.q);
+        z[real] = w.add(c[real].multiply(r)).mod(group.q);
 
-        return new OrProof(
-                ciphertext,
-                commitments[0], responses[0],
-                commitments[1], responses[1],
-                challenges[0], challenges[1],
-                respZ[0], respZ[1]
-        );
+        return new OrProof(commitment, a[0], a[1], c[0], c[1], z[0], z[1]);
     }
 
     /**
-     * Combines bit encryptions with powers-of-two weights:
-     * Enc(v) = ∏ Enc(bit_i)^(2^i)
+     * Aggregates  Π commit_i^{2^i}  which equals  g^v · h^r  when the
+     * randomness was picked so that Σ r_i · 2^i ≡ r (mod q).
      */
-    private Ciphertext aggregateBits(Ciphertext[] encryptedBits) {
-        BigInteger c1 = encryptedBits[0].c1;
-        BigInteger c2 = encryptedBits[0].c2;
+    private BigInteger aggregate(BigInteger[] commitments) {
+        BigInteger acc = commitments[0];
         for (int i = 1; i < bitLength; i++) {
-            BigInteger weight = BigInteger.ONE.shiftLeft(i); // 2^i
-            c1 = group.mul(c1, group.pow(encryptedBits[i].c1, weight));
-            c2 = group.mul(c2, group.pow(encryptedBits[i].c2, weight));
+            BigInteger weight = BigInteger.ONE.shiftLeft(i);
+            acc = group.mul(acc, group.pow(commitments[i], weight));
         }
-        return new Ciphertext(c1, c2);
+        return acc;
     }
 
     private void validateRange(BigInteger value) {
         if (value.signum() < 0 || value.bitLength() > bitLength) {
             throw new IllegalArgumentException(
-                    "value " + value + " does not fit in " + bitLength + " bits"
-            );
+                    "value " + value + " does not fit in " + bitLength + " bits");
         }
     }
 }
