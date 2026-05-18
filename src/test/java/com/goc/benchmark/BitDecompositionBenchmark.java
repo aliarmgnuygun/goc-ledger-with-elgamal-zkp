@@ -1,6 +1,5 @@
 package com.goc.benchmark;
 
-import com.goc.core.Ciphertext;
 import com.goc.core.CryptoGroup;
 import com.goc.crypto.Crypto;
 import com.goc.zkp.range.RangeProof;
@@ -113,10 +112,10 @@ public class BitDecompositionBenchmark {
 
         BigInteger max = BigInteger.TWO.pow(bitLength).subtract(BigInteger.ONE);
 
-        witnessNormal = new RangeWitness(BigInteger.valueOf(5), secretKey, publicKey);
-        witnessZero = new RangeWitness(BigInteger.ZERO, secretKey, publicKey);
-        witnessMax = new RangeWitness(max, secretKey, publicKey);
-        witnessOver = new RangeWitness(BigInteger.TWO.pow(bitLength), secretKey, publicKey);
+        witnessNormal = new RangeWitness(BigInteger.valueOf(5), publicKey);
+        witnessZero = new RangeWitness(BigInteger.ZERO, publicKey);
+        witnessMax = new RangeWitness(max, publicKey);
+        witnessOver = new RangeWitness(BigInteger.TWO.pow(bitLength), publicKey);
 
         // Precompute valid proofs for verifier benchmarks
         proofNormal = prover.prove(witnessNormal);
@@ -264,19 +263,15 @@ public class BitDecompositionBenchmark {
      * This simulates a malicious actor attempting to bypass verification.
      */
     private RangeProof tamper(RangeProof original) {
-        var bits = original.getEncryptedBits().clone();
+        var commitments = original.getBitCommitments().clone();
 
-        if (bits.length > 0) {
-            bits[0] = new Ciphertext(
-                    bits[0].c1.add(BigInteger.ONE), // corrupt c1
-                    bits[0].c2
-            );
+        if (commitments.length > 0) {
+            commitments[0] = commitments[0].add(BigInteger.ONE);
         }
 
         return new RangeProof(
-                bits,
+                commitments,
                 original.getBitProofs(),
-                original.getKeyProofs(),
                 original.getEncryptedValue(),
                 original.getBitLength()
         );

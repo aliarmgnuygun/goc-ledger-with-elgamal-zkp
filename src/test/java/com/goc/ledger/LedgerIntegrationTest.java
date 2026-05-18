@@ -3,7 +3,6 @@ package com.goc.ledger;
 import com.goc.core.Ciphertext;
 import com.goc.core.CryptoGroup;
 import com.goc.crypto.Crypto;
-import com.goc.ledger.Ledger;
 import com.goc.zkp.range.RangeProof;
 import com.goc.zkp.range.RangeWitness;
 import com.goc.zkp.range.bitdecomposition.BitDecompositionRangeProver;
@@ -51,7 +50,7 @@ class LedgerIntegrationTest {
 
     @Test
     void should_accept_valid_transaction_and_store_ciphertext() {
-        var witness = new RangeWitness(BigInteger.valueOf(5), secretKey, publicKey);
+        var witness = new RangeWitness(BigInteger.valueOf(5), publicKey);
         var proof   = prover.prove(witness);
 
         boolean accepted = ledger.submitTransaction(0, 1, proof.getEncryptedValue(), proof);
@@ -66,10 +65,9 @@ class LedgerIntegrationTest {
 
     @Test
     void should_reject_transaction_when_ciphertext_does_not_match_proof() {
-        var witness = new RangeWitness(BigInteger.valueOf(5), secretKey, publicKey);
+        var witness = new RangeWitness(BigInteger.valueOf(5), publicKey);
         var proof   = prover.prove(witness);
 
-        // Fake ciphertext (different value)
         Ciphertext fake = crypto.encrypt(BigInteger.valueOf(10), publicKey);
 
         boolean accepted = ledger.submitTransaction(0, 1, fake, proof);
@@ -83,17 +81,15 @@ class LedgerIntegrationTest {
 
     @Test
     void should_reject_when_proof_is_tampered() {
-        var witness = new RangeWitness(BigInteger.valueOf(6), secretKey, publicKey);
+        var witness = new RangeWitness(BigInteger.valueOf(6), publicKey);
         var proof   = prover.prove(witness);
 
-        // Manipulate aggregated ciphertext inside proof
         RangeProof tampered = new RangeProof(
-                proof.getEncryptedBits(),
+                proof.getBitCommitments(),
                 proof.getBitProofs(),
-                proof.getKeyProofs(),
                 new Ciphertext(
-                        proof.getEncryptedValue().c1.add(BigInteger.ONE),
-                        proof.getEncryptedValue().c2
+                        proof.getEncryptedValue().c1,
+                        proof.getEncryptedValue().c2.add(BigInteger.ONE)
                 ),
                 proof.getBitLength()
         );
@@ -104,19 +100,17 @@ class LedgerIntegrationTest {
     }
 
     // -------------------------------------------------------------------------
-    // Replay attack (same proof reused with different ciphertext)
+    // Replay attack
     // -------------------------------------------------------------------------
 
     @Test
     void should_reject_replay_attack_using_same_proof_with_different_ciphertext() {
-        var witness = new RangeWitness(BigInteger.valueOf(4), secretKey, publicKey);
+        var witness = new RangeWitness(BigInteger.valueOf(4), publicKey);
         var proof   = prover.prove(witness);
 
-        // First valid submission
         boolean first = ledger.submitTransaction(0, 2, proof.getEncryptedValue(), proof);
         assertThat(first).isTrue();
 
-        // Replay attack: reuse proof but change ciphertext
         Ciphertext fake = crypto.encrypt(BigInteger.valueOf(7), publicKey);
 
         boolean second = ledger.submitTransaction(0, 2, fake, proof);
@@ -130,11 +124,11 @@ class LedgerIntegrationTest {
 
     @Test
     void should_accumulate_encrypted_values_homomorphically() {
-        var w1 = new RangeWitness(BigInteger.valueOf(3), secretKey, publicKey);
+        var w1 = new RangeWitness(BigInteger.valueOf(3), publicKey);
         var p1 = prover.prove(w1);
         ledger.submitTransaction(0, 2, p1.getEncryptedValue(), p1);
 
-        var w2 = new RangeWitness(BigInteger.valueOf(4), secretKey, publicKey);
+        var w2 = new RangeWitness(BigInteger.valueOf(4), publicKey);
         var p2 = prover.prove(w2);
         ledger.submitTransaction(0, 2, p2.getEncryptedValue(), p2);
 
@@ -152,7 +146,7 @@ class LedgerIntegrationTest {
 
     @Test
     void should_reject_transaction_with_wrong_public_key() {
-        var witness = new RangeWitness(BigInteger.valueOf(5), secretKey, publicKey);
+        var witness = new RangeWitness(BigInteger.valueOf(5), publicKey);
         var proof   = prover.prove(witness);
 
         var anotherKeyPair = crypto.keyGen();
@@ -165,19 +159,16 @@ class LedgerIntegrationTest {
     }
 
     // -------------------------------------------------------------------------
-    // RANGE PROOF FAILURE
+    // Range proof failure
     // -------------------------------------------------------------------------
 
     @Test
     void should_reject_invalid_proof() {
-        var witness = new RangeWitness(BigInteger.valueOf(5), secretKey, publicKey);
+        var witness = new RangeWitness(BigInteger.valueOf(5), publicKey);
         var proof   = prover.prove(witness);
 
-        // Break first bit ciphertext
-        proof.getEncryptedBits()[0] = new Ciphertext(
-                proof.getEncryptedBits()[0].c1.add(BigInteger.ONE),
-                proof.getEncryptedBits()[0].c2
-        );
+        // Corrupt the first bit's Pedersen commitment
+        proof.getBitCommitments()[0] = proof.getBitCommitments()[0].add(BigInteger.ONE);
 
         boolean accepted = ledger.submitTransaction(0, 1, proof.getEncryptedValue(), proof);
 
