@@ -35,7 +35,7 @@ class BitDecompositionRangeProverTest {
         secretKey   = keyPair.secretKey;
 
         prover   = new BitDecompositionRangeProver(group, crypto, 4);
-        verifier = new BitDecompositionRangeVerifier(group, publicKey, 4);
+        verifier = new BitDecompositionRangeVerifier(group, 4);
     }
 
     @Test
@@ -43,7 +43,7 @@ class BitDecompositionRangeProverTest {
         var witness = new RangeWitness(BigInteger.valueOf(6), secretKey, publicKey);
         var proof   = prover.prove(witness);
 
-        assertThat(verifier.verify(proof)).isTrue();
+        assertThat(verifier.verify(proof, publicKey)).isTrue();
     }
 
     @Test
@@ -51,7 +51,7 @@ class BitDecompositionRangeProverTest {
         var witness = new RangeWitness(BigInteger.ZERO, secretKey, publicKey);
         var proof   = prover.prove(witness);
 
-        assertThat(verifier.verify(proof)).isTrue();
+        assertThat(verifier.verify(proof, publicKey)).isTrue();
     }
 
     @Test
@@ -59,7 +59,7 @@ class BitDecompositionRangeProverTest {
         var witness = new RangeWitness(BigInteger.valueOf(15), secretKey, publicKey);
         var proof   = prover.prove(witness);
 
-        assertThat(verifier.verify(proof)).isTrue();
+        assertThat(verifier.verify(proof, publicKey)).isTrue();
     }
 
     @Test
@@ -94,7 +94,7 @@ class BitDecompositionRangeProverTest {
                 original.z1()
         );
 
-        assertThat(verifier.verify(proof)).isFalse();
+        assertThat(verifier.verify(proof, publicKey)).isFalse();
     }
 
     @Test
@@ -113,8 +113,7 @@ class BitDecompositionRangeProverTest {
                 wrong = crypto.keyGen().publicKey;
             } while (wrong.equals(publicKey));
 
-            var wrongVerifier = new BitDecompositionRangeVerifier(group, wrong, 4);
-            if (!wrongVerifier.verify(proof)) rejections++;
+            if (!verifier.verify(proof, wrong)) rejections++;
         }
         assertThat(rejections).isGreaterThan(attempts / 2);
     }
@@ -123,9 +122,9 @@ class BitDecompositionRangeProverTest {
     void bitLengthMismatch_shouldBeRejected() {
         var witness      = new RangeWitness(BigInteger.valueOf(5), secretKey, publicKey);
         var proof        = prover.prove(witness);
-        var longVerifier = new BitDecompositionRangeVerifier(group, publicKey, 8);
+        var longVerifier = new BitDecompositionRangeVerifier(group, 8);
 
-        assertThat(longVerifier.verify(proof)).isFalse();
+        assertThat(longVerifier.verify(proof, publicKey)).isFalse();
     }
 
     @Test
@@ -146,7 +145,7 @@ class BitDecompositionRangeProverTest {
                 proof.getBitLength()
         );
 
-        assertThat(verifier.verify(corruptedProof)).isFalse();
+        assertThat(verifier.verify(corruptedProof, publicKey)).isFalse();
     }
 
     @Test
@@ -170,7 +169,7 @@ class BitDecompositionRangeProverTest {
                 proof.getBitLength()
         );
 
-        assertThat(verifier.verify(tamperedProof)).isFalse();
+        assertThat(verifier.verify(tamperedProof, publicKey)).isFalse();
     }
 
     @Test
@@ -193,7 +192,7 @@ class BitDecompositionRangeProverTest {
                 legitimate.getBitLength()
         );
 
-        assertThat(verifier.verify(spliced)).isFalse();
+        assertThat(verifier.verify(spliced, publicKey)).isFalse();
     }
 
     @Test
@@ -203,6 +202,6 @@ class BitDecompositionRangeProverTest {
 
         proof.getBitCommitments()[0] = proof.getBitCommitments()[0].add(BigInteger.ONE);
 
-        assertThat(verifier.verify(proof)).isFalse();
+        assertThat(verifier.verify(proof, publicKey)).isFalse();
     }
 }

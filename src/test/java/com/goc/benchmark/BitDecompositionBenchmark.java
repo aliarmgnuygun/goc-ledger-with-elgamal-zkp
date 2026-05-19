@@ -108,7 +108,7 @@ public class BitDecompositionBenchmark {
         publicKey = keyPair.publicKey;
 
         prover = new BitDecompositionRangeProver(group, crypto, bitLength);
-        verifier = new BitDecompositionRangeVerifier(group, publicKey, bitLength);
+        verifier = new BitDecompositionRangeVerifier(group, bitLength);
 
         BigInteger max = BigInteger.TWO.pow(bitLength).subtract(BigInteger.ONE);
 
@@ -142,7 +142,7 @@ public class BitDecompositionBenchmark {
      */
     @Benchmark
     public void verifier_valid(Blackhole bh) {
-        bh.consume(verifier.verify(proofNormal));
+        bh.consume(verifier.verify(proofNormal, publicKey));
     }
 
     // =====================================================================
@@ -188,7 +188,7 @@ public class BitDecompositionBenchmark {
      */
     @Benchmark
     public void verifier_max(Blackhole bh) {
-        bh.consume(verifier.verify(proofMax));
+        bh.consume(verifier.verify(proofMax, publicKey));
     }
 
     // =====================================================================
@@ -204,7 +204,7 @@ public class BitDecompositionBenchmark {
      */
     @Benchmark
     public void verifier_tampered(Blackhole bh) {
-        bh.consume(verifier.verify(tamperedProof));
+        bh.consume(verifier.verify(tamperedProof, publicKey));
     }
 
     // =====================================================================
@@ -228,7 +228,7 @@ public class BitDecompositionBenchmark {
     @BenchmarkMode(Mode.Throughput)
     @OutputTimeUnit(TimeUnit.SECONDS)
     public void verifier_throughput(Blackhole bh) {
-        bh.consume(verifier.verify(proofNormal));
+        bh.consume(verifier.verify(proofNormal, publicKey));
     }
 
     // =====================================================================
@@ -251,7 +251,7 @@ public class BitDecompositionBenchmark {
     @Benchmark
     @BenchmarkMode(Mode.SampleTime)
     public void verifier_sample(Blackhole bh) {
-        bh.consume(verifier.verify(proofNormal));
+        bh.consume(verifier.verify(proofNormal, publicKey));
     }
 
     // =====================================================================

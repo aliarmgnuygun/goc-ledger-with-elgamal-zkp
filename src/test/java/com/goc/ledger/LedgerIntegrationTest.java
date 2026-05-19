@@ -61,9 +61,15 @@ class LedgerIntegrationTest {
 
         prover            = new BitDecompositionRangeProver(group, crypto, BIT_LENGTH);
         equivalenceProver = new CiphertextEquivalenceProver(group, crypto);
-        var verifier      = new BitDecompositionRangeVerifier(group, publicKey, BIT_LENGTH);
+        var verifier      = new BitDecompositionRangeVerifier(group, BIT_LENGTH);
 
         ledger = new Ledger(group, 3, verifier);
+
+        // Register all three accounts with the shared key. A later test
+        // overrides specific accounts to simulate distinct owners.
+        ledger.registerAccount(0, publicKey);
+        ledger.registerAccount(1, publicKey);
+        ledger.registerAccount(2, publicKey);
     }
 
     // -------------------------------------------------------------------------
@@ -123,7 +129,7 @@ class LedgerIntegrationTest {
                 0, 1,
                 b.amountProof.getEncryptedValue(), b.amountProof,
                 b.newBalanceProof.getEncryptedValue(), b.newBalanceProof,
-                b.equivalenceProof, publicKey
+                b.equivalenceProof
         );
 
         assertThat(accepted).isTrue();
@@ -164,7 +170,7 @@ class LedgerIntegrationTest {
                 0, 1,
                 amountProof.getEncryptedValue(), amountProof,
                 fakeNewBalanceProof.getEncryptedValue(), fakeNewBalanceProof,
-                equivalence, publicKey
+                equivalence
         );
 
         assertThat(accepted).isFalse();
@@ -190,7 +196,7 @@ class LedgerIntegrationTest {
                 0, 1,
                 b.amountProof.getEncryptedValue(), b.amountProof,
                 b.newBalanceProof.getEncryptedValue(), b.newBalanceProof,
-                tamperedEquivalence, publicKey
+                tamperedEquivalence
         );
 
         assertThat(accepted).isFalse();
@@ -215,8 +221,69 @@ class LedgerIntegrationTest {
                 amountProof.getEncryptedValue(), amountProof,
                 newBalanceProof.getEncryptedValue(), newBalanceProof,
                 new CiphertextEquivalenceProof(
-                        BigInteger.ONE, BigInteger.ONE, BigInteger.ZERO),
-                publicKey
+                        BigInteger.ONE, BigInteger.ONE, BigInteger.ZERO)
+        );
+
+        assertThat(accepted).isFalse();
+    }
+
+    // -------------------------------------------------------------------------
+    // Sender authentication: another user cannot submit as Alice
+    // -------------------------------------------------------------------------
+
+    @Test
+    void should_reject_when_attacker_impersonates_another_account() {
+        // Alice (account 0) is the legitimate owner; attacker holds a
+        // different key pair and tries to spend from account 0.
+        ledger.mint(0, crypto.encrypt(BigInteger.valueOf(20), publicKey));
+
+        var attacker = crypto.keyGen();
+
+        // Attacker builds proofs with HIS OWN secret key but claims sender=0.
+        Ciphertext currentBalance = ledger.computeBalance(0);
+
+        var amountWitness = new RangeWitness(BigInteger.valueOf(5),
+                attacker.secretKey, attacker.publicKey);
+        var amountProof   = prover.prove(amountWitness);
+
+        var newBalanceWitness = new RangeWitness(BigInteger.valueOf(15),
+                attacker.secretKey, attacker.publicKey);
+        var newBalanceProof   = prover.prove(newBalanceWitness);
+
+        Ciphertext expectedNewBalance = subtract(currentBalance, amountProof.getEncryptedValue());
+        var equivalence = equivalenceProver.prove(
+                attacker.secretKey, attacker.publicKey,
+                expectedNewBalance,
+                newBalanceProof.getEncryptedValue()
+        );
+
+        boolean accepted = ledger.submitTransaction(
+                0, 1,
+                amountProof.getEncryptedValue(), amountProof,
+                newBalanceProof.getEncryptedValue(), newBalanceProof,
+                equivalence
+        );
+
+        assertThat(accepted).isFalse();
+    }
+
+    @Test
+    void should_reject_when_sender_account_is_not_registered() {
+        // Build a fresh ledger where account 0 has no registered key.
+        var freshVerifier = new BitDecompositionRangeVerifier(group, BIT_LENGTH);
+        var freshLedger   = new Ledger(group, 3, freshVerifier);
+        freshLedger.mint(0, crypto.encrypt(BigInteger.valueOf(20), publicKey));
+
+        var amountWitness     = new RangeWitness(BigInteger.valueOf(5), secretKey, publicKey);
+        var amountProof       = prover.prove(amountWitness);
+        var newBalanceWitness = new RangeWitness(BigInteger.valueOf(15), secretKey, publicKey);
+        var newBalanceProof   = prover.prove(newBalanceWitness);
+
+        boolean accepted = freshLedger.submitTransaction(
+                0, 1,
+                amountProof.getEncryptedValue(), amountProof,
+                newBalanceProof.getEncryptedValue(), newBalanceProof,
+                new CiphertextEquivalenceProof(BigInteger.ONE, BigInteger.ONE, BigInteger.ZERO)
         );
 
         assertThat(accepted).isFalse();
@@ -235,13 +302,13 @@ class LedgerIntegrationTest {
         ledger.submitTransaction(0, 1,
                 b1.amountProof.getEncryptedValue(), b1.amountProof,
                 b1.newBalanceProof.getEncryptedValue(), b1.newBalanceProof,
-                b1.equivalenceProof, publicKey);
+                b1.equivalenceProof);
 
         Bundle b2 = buildTransfer(2, 4);
         ledger.submitTransaction(2, 1,
                 b2.amountProof.getEncryptedValue(), b2.amountProof,
                 b2.newBalanceProof.getEncryptedValue(), b2.newBalanceProof,
-                b2.equivalenceProof, publicKey);
+                b2.equivalenceProof);
 
         // Recipient (account 1) accumulated 3 + 4 = 7.
         Ciphertext recipientBalance = ledger.computeBalance(1);
