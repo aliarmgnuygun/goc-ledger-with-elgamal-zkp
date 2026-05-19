@@ -21,4 +21,8 @@ public final class DomainTags {
     /** Tag for the Chaum-Pedersen challenge that binds Enc_update to the sender's secret key. */
     public static final byte[] BINDING_PROOF_CHALLENGE =
             "BINDING_PROOF_CHALLENGE".getBytes();
+
+    /** Tag for the Chaum-Pedersen challenge proving two ciphertexts encrypt the same plaintext. */
+    public static final byte[] CIPHERTEXT_EQUIVALENCE_CHALLENGE =
+            "CIPHERTEXT_EQUIVALENCE_CHALLENGE".getBytes();
 }
