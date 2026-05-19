@@ -31,7 +31,7 @@ public class DiscreteLogBenchmark {
 
     // Test the scalability: 10 Thousand, 100 Thousand, 1 Million
     @Param({"10000", "100000", "1000000"})
-    private int maxMessage;
+    private long maxMessage;
 
     // 2048-bit RFC 3526 Group 14 parameters (production-grade)
     private static final BigInteger P_2048 = new BigInteger(

@@ -44,10 +44,10 @@ public class Crypto {
     }
 
     // Brute-force discrete log (small messages only!)
-    public BigInteger bruteForceLog(BigInteger gm, int maxMessage) {
+    public BigInteger bruteForceLog(BigInteger gm, long maxMessage) {
         BigInteger current = BigInteger.ONE; // g^0
 
-        for (int i = 0; i <= maxMessage; i++) {
+        for (long i = 0; i <= maxMessage; i++) {
             if (current.equals(gm)) {
                 return BigInteger.valueOf(i);
             }
@@ -56,14 +56,14 @@ public class Crypto {
         throw new IllegalArgumentException("Discrete log not found");
     }
 
-    public BigInteger babyStepGiantStepLog(BigInteger gm, int maxMessage, CryptoGroup group) {
+    public BigInteger babyStepGiantStepLog(BigInteger gm, long maxMessage, CryptoGroup group) {
         // 1. Determine step size (m): m = ceil(sqrt(maxMessage))
-        int m = (int) Math.ceil(Math.sqrt(maxMessage));
-        Map<BigInteger, Integer> babySteps = new HashMap<>();
+        long m = (long) Math.ceil(Math.sqrt((double) maxMessage));
+        Map<BigInteger, Long> babySteps = new HashMap<>();
 
         // 2. Compute Baby Steps: Store (g^j, j) in a hash map for memory phase
         BigInteger current = BigInteger.ONE; // g^0
-        for (int j = 0; j < m; j++) {
+        for (long j = 0; j < m; j++) {
             babySteps.putIfAbsent(current, j);
             current = group.mul(current, group.g);
         }
@@ -75,10 +75,10 @@ public class Crypto {
 
         // 4. Giant Steps: Search for a match in the hash map (search phase)
         BigInteger target = gm;
-        for (int i = 0; i <= m; i++) {
+        for (long i = 0; i <= m; i++) {
             if (babySteps.containsKey(target)) {
                 // Match found: x = i * m + j
-                long x = (long) i * m + babySteps.get(target);
+                long x = Math.multiplyExact(i, m) + babySteps.get(target);
                 return BigInteger.valueOf(x);
             }
             // Move to the next giant step: target = target * c mod p
