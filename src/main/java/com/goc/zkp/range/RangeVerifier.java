@@ -1,7 +1,7 @@
 package com.goc.zkp.range;
 
-import com.goc.zkp.Verifier;
+import java.math.BigInteger;
 
-public interface RangeVerifier extends Verifier<RangeProof> {
-    boolean verify(RangeProof proof);
+public interface RangeVerifier {
+    boolean verify(RangeProof proof, BigInteger publicKey);
 }

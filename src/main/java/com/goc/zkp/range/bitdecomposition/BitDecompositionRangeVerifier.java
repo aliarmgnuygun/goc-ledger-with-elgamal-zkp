@@ -13,6 +13,9 @@ import java.math.BigInteger;
  * Verifies a Pedersen-based bit-decomposition range proof over an
  * Enc_update ciphertext.
  *
+ * The public key is supplied at verification time so the ledger can
+ * verify each transaction against the sender's own key.
+ *
  * Checks:
  *   1. Proof dimensions match the configured bit length.
  *   2. Each Pedersen commitment opens to 0 or 1 (OR-proof).
@@ -25,18 +28,16 @@ import java.math.BigInteger;
 public class BitDecompositionRangeVerifier implements RangeVerifier {
 
     private final CryptoGroup group;
-    private final BigInteger publicKey;
     private final int bitLength;
 
-    public BitDecompositionRangeVerifier(CryptoGroup group, BigInteger publicKey, int bitLength) {
+    public BitDecompositionRangeVerifier(CryptoGroup group, int bitLength) {
         if (bitLength <= 0) throw new IllegalArgumentException("bitLength must be positive");
         this.group = group;
-        this.publicKey = publicKey;
         this.bitLength = bitLength;
     }
 
     @Override
-    public boolean verify(RangeProof proof) {
+    public boolean verify(RangeProof proof, BigInteger publicKey) {
         if (!validateDimensions(proof)) return false;
 
         BigInteger[] commitments = proof.getBitCommitments();
@@ -44,11 +45,11 @@ public class BitDecompositionRangeVerifier implements RangeVerifier {
 
         for (int i = 0; i < bitLength; i++) {
             if (!commitments[i].equals(bitProofs[i].commitment())) return false;
-            if (!verifyBitIsZeroOrOne(bitProofs[i])) return false;
+            if (!verifyBitIsZeroOrOne(bitProofs[i], publicKey)) return false;
         }
 
         if (!verifyAggregation(proof)) return false;
-        return verifyBinding(proof);
+        return verifyBinding(proof, publicKey);
     }
 
     private boolean validateDimensions(RangeProof proof) {
@@ -78,7 +79,7 @@ public class BitDecompositionRangeVerifier implements RangeVerifier {
      *   h^z0 == a0 · commit^c0                    (branch 0)
      *   h^z1 == a1 · (commit · g^{-1})^c1         (branch 1)
      */
-    private boolean verifyBitIsZeroOrOne(OrProof proof) {
+    private boolean verifyBitIsZeroOrOne(OrProof proof, BigInteger publicKey) {
         BigInteger commit  = proof.commitment();
         BigInteger target1 = group.mul(commit, group.inverse(group.g));
 
@@ -108,7 +109,7 @@ public class BitDecompositionRangeVerifier implements RangeVerifier {
      *   g^s    == K1 · h^c
      *   y^s    == K2 · z^c
      */
-    private boolean verifyBinding(RangeProof proof) {
+    private boolean verifyBinding(RangeProof proof, BigInteger publicKey) {
         BindingProof bp = proof.getBindingProof();
         Ciphertext ct = proof.getEncryptedValue();
         BigInteger R = bp.R();

@@ -15,8 +15,9 @@ import java.math.BigInteger;
  * amount and her remaining balance are non-negative — without revealing
  * either value.
  *
- * Accounts can be seeded with initial credit via {@link #mint}; balances
- * are then derived on demand from the recorded inflows and outflows.
+ * Each account is registered with its own public key, and all proofs
+ * are verified against the sender's key so a third party cannot submit
+ * transactions on someone else's behalf.
  */
 public class Ledger {
 
@@ -24,6 +25,7 @@ public class Ledger {
     private final int size;
     private final Ciphertext[][] matrix;
     private final Ciphertext[] initialBalance;
+    private final BigInteger[] accountPublicKeys;
     private final RangeVerifier rangeVerifier;
     private final CiphertextEquivalenceVerifier equivalenceVerifier;
 
@@ -32,8 +34,17 @@ public class Ledger {
         this.size = size;
         this.matrix = new Ciphertext[size][size];
         this.initialBalance = new Ciphertext[size];
+        this.accountPublicKeys = new BigInteger[size];
         this.rangeVerifier = rangeVerifier;
         this.equivalenceVerifier = new CiphertextEquivalenceVerifier(group);
+    }
+
+    /**
+     * Registers an account with its public key. Required before the
+     * account can send or receive transactions.
+     */
+    public void registerAccount(int account, BigInteger publicKey) {
+        accountPublicKeys[account] = publicKey;
     }
 
     /**
@@ -78,14 +89,17 @@ public class Ledger {
             RangeProof amountProof,
             Ciphertext newSenderBalance,
             RangeProof newBalanceProof,
-            CiphertextEquivalenceProof equivalenceProof,
-            BigInteger senderPublicKey
+            CiphertextEquivalenceProof equivalenceProof
     ) {
-        // 1. Both range proofs must validate.
-        if (!rangeVerifier.verify(amountProof)) return false;
+        // 0. Sender must be a registered account.
+        BigInteger senderPublicKey = accountPublicKeys[sender];
+        if (senderPublicKey == null) return false;
+
+        // 1. Both range proofs must validate against the sender's key.
+        if (!rangeVerifier.verify(amountProof, senderPublicKey)) return false;
         if (!amount.equals(amountProof.getEncryptedValue())) return false;
 
-        if (!rangeVerifier.verify(newBalanceProof)) return false;
+        if (!rangeVerifier.verify(newBalanceProof, senderPublicKey)) return false;
         if (!newSenderBalance.equals(newBalanceProof.getEncryptedValue())) return false;
 
         // 2. The submitted newSenderBalance must encrypt the same value as
@@ -115,6 +129,10 @@ public class Ledger {
         return initialBalance[account];
     }
 
+    public BigInteger getAccountPublicKey(int account) {
+        return accountPublicKeys[account];
+    }
+
     /** Homomorphic subtraction: Enc(a) · Enc(b)^{-1} = Enc(a - b). */
     private Ciphertext subtract(Ciphertext a, Ciphertext b) {
         return new Ciphertext(
@@ -122,5 +140,4 @@ public class Ledger {
                 group.mul(a.c2, group.inverse(b.c2))
         );
     }
-
 }
