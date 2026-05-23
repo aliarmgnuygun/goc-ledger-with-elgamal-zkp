@@ -54,5 +54,12 @@
             <version>1.37</version>
             <scope>provided</scope>
         </dependency>
+
+        <!-- Ristretto255 / Curve25519 (maintained fork by weavechain) -->
+        <dependency>
+            <groupId>com.weavechain</groupId>
+            <artifactId>curve25519-elisabeth</artifactId>
+            <version>0.1.5</version>
+        </dependency>
     </dependencies>
 </project>
