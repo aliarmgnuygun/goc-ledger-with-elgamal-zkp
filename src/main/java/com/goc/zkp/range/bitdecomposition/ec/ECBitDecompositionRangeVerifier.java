@@ -27,7 +27,6 @@ public class ECBitDecompositionRangeVerifier implements ECRangeVerifier {
 
     public ECBitDecompositionRangeVerifier(ECCryptoGroup group, int bitLength) {
         if (bitLength <= 0) throw new IllegalArgumentException("bitLength must be positive");
-        if (bitLength > 63) throw new IllegalArgumentException("bitLength must fit in a long (<= 63)");
         this.group = group;
         this.bitLength = bitLength;
     }
