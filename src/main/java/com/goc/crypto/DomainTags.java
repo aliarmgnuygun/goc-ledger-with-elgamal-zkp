@@ -25,4 +25,21 @@ public final class DomainTags {
     /** Tag for the Chaum-Pedersen challenge proving two ciphertexts encrypt the same plaintext. */
     public static final byte[] CIPHERTEXT_EQUIVALENCE_CHALLENGE =
             "CIPHERTEXT_EQUIVALENCE_CHALLENGE".getBytes();
+
+    // ---------------------------------------------------------------------
+    // EC (Ristretto255) variants — kept distinct from the DL tags above so
+    // proofs cannot be confused across the two groups.
+    // ---------------------------------------------------------------------
+
+    public static final byte[] EC_OR_PROOF_CHALLENGE =
+            "EC_OR_PROOF_CHALLENGE".getBytes();
+
+    public static final byte[] EC_ENC_UPDATE_DERIVE =
+            "EC_ENC_UPDATE_DERIVE".getBytes();
+
+    public static final byte[] EC_BINDING_PROOF_CHALLENGE =
+            "EC_BINDING_PROOF_CHALLENGE".getBytes();
+
+    public static final byte[] EC_CIPHERTEXT_EQUIVALENCE_CHALLENGE =
+            "EC_CIPHERTEXT_EQUIVALENCE_CHALLENGE".getBytes();
 }
