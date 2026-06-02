@@ -14,6 +14,16 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     </properties>
 
+    <!--
+        weavechain:bulletproofs pulls keccakj and caffeine through JitPack.
+    -->
+    <repositories>
+        <repository>
+            <id>jitpack.io</id>
+            <url>https://jitpack.io</url>
+        </repository>
+    </repositories>
+
     <dependencies>
         <!-- Testing -->
         <dependency>
@@ -60,6 +70,20 @@
             <groupId>com.weavechain</groupId>
             <artifactId>curve25519-elisabeth</artifactId>
             <version>0.1.5</version>
+        </dependency>
+
+        <!-- Bulletproofs (pure Java port of dalek-cryptography, Ristretto255) -->
+        <dependency>
+            <groupId>com.weavechain</groupId>
+            <artifactId>bulletproofs</artifactId>
+            <version>1.0.11</version>
+        </dependency>
+
+        <!-- Bulletproofs gadgets: range proof, set membership, etc. -->
+        <dependency>
+            <groupId>com.weavechain</groupId>
+            <artifactId>bulletproofs-gadgets</artifactId>
+            <version>1.0.11</version>
         </dependency>
     </dependencies>
 </project>
