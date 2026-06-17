@@ -26,6 +26,10 @@ public final class DomainTags {
     public static final byte[] CIPHERTEXT_EQUIVALENCE_CHALLENGE =
             "CIPHERTEXT_EQUIVALENCE_CHALLENGE".getBytes();
 
+    /** Tag for the value-link proof binding the Pedersen commitment C to the ElGamal ciphertext c2. */
+    public static final byte[] VALUE_LINK_CHALLENGE =
+            "VALUE_LINK_CHALLENGE".getBytes();
+
     // ---------------------------------------------------------------------
     // EC (Ristretto255) variants — kept distinct from the DL tags above so
     // proofs cannot be confused across the two groups.
@@ -42,4 +46,7 @@ public final class DomainTags {
 
     public static final byte[] EC_CIPHERTEXT_EQUIVALENCE_CHALLENGE =
             "EC_CIPHERTEXT_EQUIVALENCE_CHALLENGE".getBytes();
+
+    public static final byte[] EC_VALUE_LINK_CHALLENGE =
+            "EC_VALUE_LINK_CHALLENGE".getBytes();
 }
