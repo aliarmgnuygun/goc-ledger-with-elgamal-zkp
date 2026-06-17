@@ -100,7 +100,7 @@ src/main/java/com/goc/
     └── DlScenarios, EcScenarios, BpScenarios
 ```
 
-Every package has an `ec/` counterpart implementing the same protocol over Ristretto255. The demo web UI lives in `src/main/resources/static/index.html`, and the unit/integration tests and JMH benchmarks are under `src/test/java/com/goc/`. In total, ~3,500 lines of production code and ~1,900 lines of test/benchmark code.
+Every package has an `ec/` counterpart implementing the same protocol over Ristretto255. The demo web UI lives in `src/main/resources/static/index.html`, and the unit/integration tests and JMH benchmarks are under `src/test/java/com/goc/`. In total, ~3,700 lines of production code across 52 files and ~1,900 lines of test/benchmark code across 12 files.
 
 ## Key code and logic
 
