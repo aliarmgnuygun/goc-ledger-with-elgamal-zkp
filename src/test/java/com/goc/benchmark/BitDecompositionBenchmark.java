@@ -16,22 +16,24 @@ import java.math.BigInteger;
 import java.util.concurrent.TimeUnit;
 
 /**
- * Comprehensive JMH Benchmark: BitDecomposition Range Proof
+ * JMH Benchmark: BitDecomposition Range Proof (Discrete-Log group).
  *
  * Measured dimensions:
- * 1. Average Prover & Verifier time (ms)
- * 2. Boundary values: 0, max-1, max, max+1 (overflow test)
- * 3. Invalid proof rejection speed (tampered proof check)
- * 4. Memory allocation (@AuxCounters + GC pressure)
- * 5. Usage of 2048-bit production parameters
+ *   1. Baseline   — average prover & verifier time (ms)
+ *   2. Rejection  — verifier time on a tampered (invalid) proof
+ *   3. Throughput — operations per second
+ *
+ * Mirrors {@link ECBitDecompositionBenchmark} and {@link BulletproofBenchmark}
+ * so all three implementations compare apples-to-apples across the same
+ * bit-length sweep (4..32).
  *
  * How to run via CLI:
- * mvn clean package
- * java -jar target/benchmarks.jar BitDecompositionBenchmark -prof gc
+ *   mvn clean package
+ *   java -jar target/benchmarks.jar BitDecompositionBenchmark -prof gc
  */
 @BenchmarkMode(Mode.AverageTime)
 @OutputTimeUnit(TimeUnit.MILLISECONDS)
-@State(Scope.Benchmark)            // Benchmark scope instead of Thread: shared state, more realistic
+@State(Scope.Benchmark)            // Benchmark scope: shared state, more realistic
 @Warmup(iterations = 5, time = 2)  // Ensure JIT is fully warmed up
 @Measurement(iterations = 10, time = 2)
 @Fork(value = 2, jvmArgsAppend = {
@@ -43,9 +45,8 @@ public class BitDecompositionBenchmark {
 
     // ---------------------------------------------------------------------
     // Parameter: number of bits in the range proof
-    // Controls proof size and computational complexity
     // ---------------------------------------------------------------------
-    @Param({"4", "8", "16", "32", "64"})
+    @Param({"4", "8", "16", "32"})
     private int bitLength;
 
     // -------------------------------------------------------------------------
@@ -73,55 +74,29 @@ public class BitDecompositionBenchmark {
     // ---------------------------------------------------------------------
     private CryptoGroup group;
     private Crypto crypto;
-    private BigInteger secretKey;
     private BigInteger publicKey;
 
     private BitDecompositionRangeProver prover;
     private BitDecompositionRangeVerifier verifier;
 
-    // ---------------------------------------------------------------------
-    // Witnesses (test inputs)
-    // ---------------------------------------------------------------------
-    private RangeWitness witnessNormal; // typical value
-    private RangeWitness witnessZero;   // lower bound
-    private RangeWitness witnessMax;    // upper bound
-    private RangeWitness witnessOver;   // invalid (out-of-range)
+    private RangeWitness witnessNormal;  // typical value
+    private RangeProof proofNormal;      // precomputed valid proof (verifier benchmarks)
+    private RangeProof tamperedProof;    // precomputed invalid proof (rejection benchmark)
 
-    // ---------------------------------------------------------------------
-    // Precomputed proofs (used for verifier benchmarks)
-    // Avoids measuring prover inside verifier tests
-    // ---------------------------------------------------------------------
-    private RangeProof proofNormal;
-    private RangeProof proofMax;
-    private RangeProof tamperedProof;
-
-    // ---------------------------------------------------------------------
-    // Setup (executed once per benchmark run)
-    // ---------------------------------------------------------------------
     @Setup(Level.Trial)
     public void setup() {
         group = new CryptoGroup(P_2048, Q_2048, G_2048);
         crypto = new Crypto(group);
 
         var keyPair = crypto.keyGen();
-        secretKey = keyPair.secretKey;
+        BigInteger secretKey = keyPair.secretKey;
         publicKey = keyPair.publicKey;
 
         prover = new BitDecompositionRangeProver(group, crypto, bitLength);
         verifier = new BitDecompositionRangeVerifier(group, bitLength);
 
-        BigInteger max = BigInteger.TWO.pow(bitLength).subtract(BigInteger.ONE);
-
         witnessNormal = new RangeWitness(BigInteger.valueOf(5), secretKey, publicKey);
-        witnessZero = new RangeWitness(BigInteger.ZERO, secretKey, publicKey);
-        witnessMax = new RangeWitness(max, secretKey, publicKey);
-        witnessOver = new RangeWitness(BigInteger.TWO.pow(bitLength), secretKey, publicKey);
-
-        // Precompute valid proofs for verifier benchmarks
         proofNormal = prover.prove(witnessNormal);
-        proofMax = prover.prove(witnessMax);
-
-        // Create an invalid proof by tampering
         tamperedProof = tamper(proofNormal);
     }
 
@@ -129,91 +104,32 @@ public class BitDecompositionBenchmark {
     // GROUP 1: Baseline performance
     // =====================================================================
 
-    /**
-     * Measures prover execution time for a typical value.
-     */
+    /** Prover execution time for a typical value. */
     @Benchmark
     public void prover_normal(Blackhole bh) {
         bh.consume(prover.prove(witnessNormal));
     }
 
-    /**
-     * Measures verifier execution time for a valid proof.
-     */
+    /** Verifier execution time for a valid proof. */
     @Benchmark
     public void verifier_valid(Blackhole bh) {
         bh.consume(verifier.verify(proofNormal, publicKey));
     }
 
     // =====================================================================
-    // GROUP 2: Boundary conditions
+    // GROUP 2: Invalid proof rejection (soundness)
     // =====================================================================
 
-    /**
-     * Lower bound test (value = 0).
-     */
-    @Benchmark
-    public void prover_zero(Blackhole bh) {
-        bh.consume(prover.prove(witnessZero));
-    }
-
-    /**
-     * Upper bound test (value = 2^n - 1).
-     */
-    @Benchmark
-    public void prover_max(Blackhole bh) {
-        bh.consume(prover.prove(witnessMax));
-    }
-
-    /**
-     * Out-of-range value test.
-     * <p>
-     * Expected behavior:
-     * - Prover should fail fast (exception)
-     * - Should NOT take same time as valid proof
-     * <p>
-     * Important for detecting potential timing side channels.
-     */
-    @Benchmark
-    public void prover_overflow() {
-        try {
-            prover.prove(witnessOver);
-        } catch (Exception ignored) {
-            // expected
-        }
-    }
-
-    /**
-     * Verifier performance at upper boundary.
-     */
-    @Benchmark
-    public void verifier_max(Blackhole bh) {
-        bh.consume(verifier.verify(proofMax, publicKey));
-    }
-
-    // =====================================================================
-    // GROUP 3: Invalid proof rejection
-    // =====================================================================
-
-    /**
-     * Verifier should reject tampered proofs.
-     * <p>
-     * Timing comparison vs valid proofs helps detect:
-     * - early exit behavior
-     * - potential timing leaks
-     */
+    /** Verifier must reject a tampered proof; measures rejection time. */
     @Benchmark
     public void verifier_tampered(Blackhole bh) {
         bh.consume(verifier.verify(tamperedProof, publicKey));
     }
 
     // =====================================================================
-    // GROUP 4: Throughput (operations per second)
+    // GROUP 3: Throughput (operations per second)
     // =====================================================================
 
-    /**
-     * Prover throughput (ops/sec).
-     */
     @Benchmark
     @BenchmarkMode(Mode.Throughput)
     @OutputTimeUnit(TimeUnit.SECONDS)
@@ -221,9 +137,6 @@ public class BitDecompositionBenchmark {
         bh.consume(prover.prove(witnessNormal));
     }
 
-    /**
-     * Verifier throughput (ops/sec).
-     */
     @Benchmark
     @BenchmarkMode(Mode.Throughput)
     @OutputTimeUnit(TimeUnit.SECONDS)
@@ -232,47 +145,20 @@ public class BitDecompositionBenchmark {
     }
 
     // =====================================================================
-    // GROUP 5: Latency distribution (p50, p95, p99)
+    // Helper: tamper proof (simulate adversarial modification)
     // =====================================================================
 
-    /**
-     * Prover latency sampling.
-     * Useful for tail latency analysis (p99).
-     */
-    @Benchmark
-    @BenchmarkMode(Mode.SampleTime)
-    public void prover_sample(Blackhole bh) {
-        bh.consume(prover.prove(witnessNormal));
-    }
-
-    /**
-     * Verifier latency sampling.
-     */
-    @Benchmark
-    @BenchmarkMode(Mode.SampleTime)
-    public void verifier_sample(Blackhole bh) {
-        bh.consume(verifier.verify(proofNormal, publicKey));
-    }
-
-    // =====================================================================
-    // Helper: Tamper proof (simulate adversarial modification)
-    // =====================================================================
-
-    /**
-     * Produces a modified (invalid) proof by corrupting ciphertext.
-     * This simulates a malicious actor attempting to bypass verification.
-     */
     private RangeProof tamper(RangeProof original) {
         var commitments = original.getBitCommitments().clone();
-
         if (commitments.length > 0) {
             commitments[0] = commitments[0].add(BigInteger.ONE);
         }
-
         return new RangeProof(
                 commitments,
                 original.getBitProofs(),
+                original.getPedersenCommitment(),
                 original.getEncryptedValue(),
+                original.getValueLinkProof(),
                 original.getBindingProof(),
                 original.getBitLength()
         );
@@ -284,20 +170,10 @@ public class BitDecompositionBenchmark {
     public static void main(String[] args) throws Exception {
         Options opt = new OptionsBuilder()
                 .include(".*BitDecompositionBenchmark.*")
-
-                // JVM forks (important for stable results)
                 .forks(2)
-
-                // Output format → JSON (for analysis)
                 .resultFormat(org.openjdk.jmh.results.format.ResultFormatType.JSON)
-
-                // Output file
-                .result("benchmark-results.json")
-
-                // Profilers
-                .addProfiler("gc")     // memory allocation & GC
-                .addProfiler("stack")  // hotspot methods
-
+                .result("dl.json")
+                .addProfiler("gc")
                 .build();
 
         new Runner(opt).run();

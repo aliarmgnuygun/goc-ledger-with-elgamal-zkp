@@ -140,7 +140,9 @@ class BitDecompositionRangeProverTest {
         var corruptedProof = new RangeProof(
                 proof.getBitCommitments(),
                 proof.getBitProofs(),
+                proof.getPedersenCommitment(),
                 corruptedValue,
+                proof.getValueLinkProof(),
                 proof.getBindingProof(),
                 proof.getBitLength()
         );
@@ -164,7 +166,9 @@ class BitDecompositionRangeProverTest {
         var tamperedProof = new RangeProof(
                 proof.getBitCommitments(),
                 proof.getBitProofs(),
+                proof.getPedersenCommitment(),
                 proof.getEncryptedValue(),
+                proof.getValueLinkProof(),
                 tampered,
                 proof.getBitLength()
         );
@@ -187,7 +191,9 @@ class BitDecompositionRangeProverTest {
         var spliced = new RangeProof(
                 legitimate.getBitCommitments(),
                 legitimate.getBitProofs(),
+                legitimate.getPedersenCommitment(),
                 legitimate.getEncryptedValue(),
+                legitimate.getValueLinkProof(),
                 attackerProof.getBindingProof(),
                 legitimate.getBitLength()
         );

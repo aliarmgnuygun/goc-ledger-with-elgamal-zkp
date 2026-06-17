@@ -12,25 +12,20 @@ import com.goc.zkp.range.RangeWitness;
 import java.math.BigInteger;
 
 /**
- * Range proof via bit decomposition over Enc_update ciphertexts.
+ * Range proof via bit decomposition.
  *
- * Encryption (Enc_update):
- *   r       ← random in Z_q
- *   R       = g^r                  (revealed in the binding proof)
- *   y_exp   = H(R)                 (scalar, via Fiat-Shamir)
- *   a       = r + y_exp  (mod q)   (effective randomness)
- *   c1      = g^a  (= R · g^{y_exp})
- *   c2      = g^v · h^a            (recovered via Pedersen aggregation)
+ * Two commitments to the same value v are produced:
  *
- * Bit randomness for the lowest bit is forced so aggregation matches a:
- *   r_0 = a − Σ_{i≥1} r_i · 2^i  (mod q)
- * giving  Π commit_i^{2^i} = g^v · h^a = c2.
+ *   ElGamal (decryptable):  c1 = g^a,  c2 = g^v · pk^a   with a = r + H(g^r)
+ *   Pedersen (range proof):  C = g^v · h^s               with INDEPENDENT h
  *
- * For each bit a Pedersen-bit OR-proof shows b_i ∈ {0, 1}.
+ * Each bit gets a Pedersen commitment  commit_i = g^{b_i} · h^{r_i}  and a
+ * 0/1 OR-proof; their weighted product Π commit_i^{2^i} = g^v · h^s = C.
+ * Because log_g(h) is unknown, the bit commitments are binding, so the
+ * OR-proofs genuinely constrain v ∈ [0, 2^k).
  *
- * A Chaum-Pedersen binding proof attests that the ciphertext was crafted
- * by the holder of the secret key x, i.e. g^x = h ∧ y^x = z, where
- * y = g^{y_exp} and z = h^{y_exp}.
+ * A value-link proof certifies that C and c2 hide the same v, and a
+ * Chaum-Pedersen binding proof authenticates the ciphertext to the sender.
  */
 public class BitDecompositionRangeProver implements RangeProver {
 
@@ -49,96 +44,88 @@ public class BitDecompositionRangeProver implements RangeProver {
     public RangeProof prove(RangeWitness witness) {
         validateRange(witness.value());
 
-        BigInteger h = witness.publicKey();
-        BigInteger x = witness.secretKey();
+        BigInteger v  = witness.value();
+        BigInteger pk = witness.publicKey();
+        BigInteger x  = witness.secretKey();
 
-        // Enc_update randomness derivation
-        BigInteger r     = crypto.generateRandomness();
-        BigInteger R     = group.pow(group.g, r);
-        BigInteger yExp  = FiatShamir.hashToZq(group.q, DomainTags.ENC_UPDATE_DERIVE, R);
-        BigInteger a     = r.add(yExp).mod(group.q);
+        // --- Enc_update ElGamal encryption of v ---
+        BigInteger r    = crypto.generateRandomness();
+        BigInteger R    = group.pow(group.g, r);
+        BigInteger yExp = FiatShamir.hashToZq(group.q, DomainTags.ENC_UPDATE_DERIVE, R);
+        BigInteger a    = r.add(yExp).mod(group.q);
 
-        BigInteger[] bitRandomness = pickBitRandomness(a);
+        BigInteger c1 = group.pow(group.g, a);
+        BigInteger c2 = group.mul(group.pow(group.g, v), group.pow(pk, a)); // g^v · pk^a
+        Ciphertext encryptedValue = new Ciphertext(c1, c2);
+
+        // --- Pedersen bit commitments on the INDEPENDENT generator h ---
+        BigInteger[] bitRandomness = new BigInteger[bitLength];
         BigInteger[] commitments   = new BigInteger[bitLength];
-        OrProof[]    bitProofs     = new OrProof[bitLength];
+        OrProof[]    bitProofs      = new OrProof[bitLength];
+        BigInteger   s             = BigInteger.ZERO; // s = Σ r_i · 2^i
 
         for (int i = 0; i < bitLength; i++) {
             int bit = witness.value().testBit(i) ? 1 : 0;
-            commitments[i] = pedersenCommit(bit, bitRandomness[i], h);
-            bitProofs[i]   = proveBitIsZeroOrOne(bit, bitRandomness[i], commitments[i], h);
-        }
-
-        Ciphertext encryptedValue = new Ciphertext(
-                group.pow(group.g, a),
-                aggregate(commitments)
-        );
-
-        BindingProof bindingProof = proveBinding(x, h, yExp, R, encryptedValue);
-
-        return new RangeProof(commitments, bitProofs, encryptedValue, bindingProof, bitLength);
-    }
-
-    /**
-     * Picks r_1 .. r_{k-1} uniformly and forces r_0 so that
-     * Σ r_i · 2^i ≡ a (mod q).
-     */
-    private BigInteger[] pickBitRandomness(BigInteger a) {
-        BigInteger[] bitRandomness = new BigInteger[bitLength];
-        BigInteger weightedSum = BigInteger.ZERO;
-        for (int i = 1; i < bitLength; i++) {
             bitRandomness[i] = crypto.generateRandomness();
-            weightedSum = weightedSum.add(bitRandomness[i].shiftLeft(i)).mod(group.q);
+            commitments[i]   = pedersenCommit(bit, bitRandomness[i]);
+            bitProofs[i]     = proveBitIsZeroOrOne(bit, bitRandomness[i], commitments[i]);
+            s = s.add(bitRandomness[i].shiftLeft(i)).mod(group.q);
         }
-        bitRandomness[0] = a.subtract(weightedSum).mod(group.q);
-        return bitRandomness;
+
+        BigInteger C = aggregate(commitments); // = g^v · h^s
+
+        // --- Proofs binding everything together ---
+        ValueLinkProof linkProof    = proveValueLink(v, a, s, pk, c2, C);
+        BindingProof   bindingProof = proveBinding(x, pk, yExp, R, encryptedValue);
+
+        return new RangeProof(commitments, bitProofs, C, encryptedValue,
+                linkProof, bindingProof, bitLength);
     }
 
-    private BigInteger pedersenCommit(int bit, BigInteger randomness, BigInteger h) {
+    // -----------------------------------------------------------------
+    // Pedersen commitment on the independent generator h
+    // -----------------------------------------------------------------
+
+    private BigInteger pedersenCommit(int bit, BigInteger randomness) {
         BigInteger gPart = (bit == 1) ? group.g : BigInteger.ONE;
-        BigInteger hPart = group.pow(h, randomness);
+        BigInteger hPart = group.pow(group.h, randomness);
         return group.mul(gPart, hPart);
     }
 
     /**
-     * Standard Pedersen-bit OR-proof (Cramer–Damgård–Schoenmakers).
+     * Pedersen-bit OR-proof (Cramer–Damgård–Schoenmakers).
      *
      * Statement: commit = h^r  ∨  commit · g^{-1} = h^r
      *
      * - Real branch (b = actual bit): standard sigma commitment using known r.
-     * - Fake branch (1-b): challenge and response chosen at random;
-     *                      sigma commitment back-computed from the
-     *                      verification equation.
-     *
-     * The total challenge is bound via Fiat-Shamir and split between
-     * branches so c0 + c1 ≡ H(g, h, commit, a0, a1) (mod q).
+     * - Fake branch (1-b): challenge and response chosen at random; the sigma
+     *   commitment is back-computed from the verification equation.
      */
-    private OrProof proveBitIsZeroOrOne(int bit, BigInteger r,
-                                        BigInteger commitment, BigInteger h) {
+    private OrProof proveBitIsZeroOrOne(int bit, BigInteger r, BigInteger commitment) {
         int real = bit;
         int fake = 1 - bit;
 
-        BigInteger target0 = commitment;
-        BigInteger target1 = group.mul(commitment, group.inverse(group.g));
-        BigInteger fakeTarget = (fake == 0) ? target0 : target1;
+        BigInteger target1    = group.mul(commitment, group.inverse(group.g));
+        BigInteger fakeTarget = (fake == 0) ? commitment : target1;
 
         BigInteger[] a = new BigInteger[2];
         BigInteger[] c = new BigInteger[2];
         BigInteger[] z = new BigInteger[2];
 
         BigInteger w = crypto.generateRandomness();
-        a[real] = group.pow(h, w);
+        a[real] = group.pow(group.h, w);
 
         c[fake] = crypto.generateRandomness();
         z[fake] = crypto.generateRandomness();
         a[fake] = group.mul(
-                group.pow(h, z[fake]),
+                group.pow(group.h, z[fake]),
                 group.inverse(group.pow(fakeTarget, c[fake]))
         );
 
         BigInteger total = FiatShamir.hashToZq(
                 group.q,
                 DomainTags.OR_PROOF_CHALLENGE,
-                group.g, h, commitment, a[0], a[1]
+                group.g, group.h, commitment, a[0], a[1]
         );
         c[real] = total.subtract(c[fake]).mod(group.q);
         z[real] = w.add(c[real].multiply(r)).mod(group.q);
@@ -147,15 +134,41 @@ public class BitDecompositionRangeProver implements RangeProver {
     }
 
     /**
-     * Chaum-Pedersen NIZK proving g^x = h ∧ y^x = z, where
-     * y = g^{y_exp} and z = h^{y_exp}. Transcript binds the proof to
-     * (R, c1, c2) so it cannot be replayed against another ciphertext.
+     * Value-link proof: c2 = g^v · pk^a  ∧  C = g^v · h^s  share the same v.
+     *
+     * Commit:    t1 = g^{rv} · pk^{ra},  t2 = g^{rv} · h^{rs}
+     * Challenge: e  = H(g, pk, h, c2, C, t1, t2)
+     * Response:  zv = rv + e·v,  za = ra + e·a,  zs = rs + e·s
      */
-    private BindingProof proveBinding(BigInteger x, BigInteger h,
+    private ValueLinkProof proveValueLink(BigInteger v, BigInteger a, BigInteger s,
+                                          BigInteger pk, BigInteger c2, BigInteger C) {
+        BigInteger rv = crypto.generateRandomness();
+        BigInteger ra = crypto.generateRandomness();
+        BigInteger rs = crypto.generateRandomness();
+
+        BigInteger t1 = group.mul(group.pow(group.g, rv), group.pow(pk, ra));
+        BigInteger t2 = group.mul(group.pow(group.g, rv), group.pow(group.h, rs));
+
+        BigInteger e = FiatShamir.hashToZq(
+                group.q, DomainTags.VALUE_LINK_CHALLENGE,
+                group.g, pk, group.h, c2, C, t1, t2);
+
+        BigInteger zv = rv.add(e.multiply(v)).mod(group.q);
+        BigInteger za = ra.add(e.multiply(a)).mod(group.q);
+        BigInteger zs = rs.add(e.multiply(s)).mod(group.q);
+
+        return new ValueLinkProof(t1, t2, zv, za, zs);
+    }
+
+    /**
+     * Chaum-Pedersen NIZK proving g^x = pk ∧ y^x = z, where y = g^{y_exp}
+     * and z = pk^{y_exp}. Transcript binds the proof to (R, c1, c2).
+     */
+    private BindingProof proveBinding(BigInteger x, BigInteger pk,
                                       BigInteger yExp, BigInteger R,
                                       Ciphertext encryptedValue) {
         BigInteger y = group.pow(group.g, yExp);
-        BigInteger z = group.pow(h, yExp); // = y^x
+        BigInteger z = group.pow(pk, yExp);
 
         BigInteger w  = crypto.generateRandomness();
         BigInteger K1 = group.pow(group.g, w);
@@ -164,7 +177,7 @@ public class BitDecompositionRangeProver implements RangeProver {
         BigInteger challenge = FiatShamir.hashToZq(
                 group.q,
                 DomainTags.BINDING_PROOF_CHALLENGE,
-                group.g, h, y, z, R,
+                group.g, pk, y, z, R,
                 encryptedValue.c1, encryptedValue.c2,
                 K1, K2
         );
@@ -173,10 +186,7 @@ public class BitDecompositionRangeProver implements RangeProver {
         return new BindingProof(R, K1, K2, s);
     }
 
-    /**
-     * Aggregates  Π commit_i^{2^i}  which equals  g^v · h^a  when the
-     * randomness was picked so that Σ r_i · 2^i ≡ a (mod q).
-     */
+    /** Aggregates Π commit_i^{2^i} = g^v · h^s. */
     private BigInteger aggregate(BigInteger[] commitments) {
         BigInteger acc = commitments[0];
         for (int i = 1; i < bitLength; i++) {
