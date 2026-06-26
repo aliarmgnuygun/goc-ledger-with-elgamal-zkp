@@ -167,8 +167,9 @@
     <div class="panel">
       <h2>Ledger Scenarios <span class="sub">— end-to-end integration tests on the full ledger</span></h2>
       <p class="hint">Each scenario runs a whole transfer flow (range proof + equivalence proof + ledger
-        check) on its own fresh ledger and compares the verdict with the expected one. Click a title for
-        the step-by-step log.</p>
+        check) on its own fresh ledger and compares the verdict with the expected one. Every scenario uses
+        a fixed <b>8-bit range</b> (amounts and balances stay in 0–255). Click a title for the step-by-step
+        log.</p>
       <div class="row">
         <div class="field">
           <label>Backend</label>
@@ -194,10 +195,11 @@
         lies in <code>[0, 2⁸)</code>. Click a title for the step-by-step log.</p>
       <div class="callout">
         <span class="tag">Why 2⁸ (values 0–255)?</span>
-        Bulletproofs itself supports any power-of-two range — 16, 32, 64 bits and beyond. These tests fix
-        the range at <b>8 bits</b> on purpose: it keeps the numbers small and easy to follow, it runs
-        instantly, and it matches the 8-bit range the rest of the demo uses. So <code>2⁸</code> is just
-        this demo's chosen size, not a limit of Bulletproofs.
+        The range size has to be a power of two; our Bulletproofs library handles 4, 8, 16 and 32 bits
+        (these are the sizes the benchmark charts compare). These tests fix the range at <b>8 bits</b> on
+        purpose: it keeps the numbers small and easy to follow, it runs instantly, and it matches the 8-bit
+        range the rest of the demo uses. So <code>2⁸</code> is simply the size chosen here, not the only
+        one the proof can do.
       </div>
       <button id="bp-runall">Run all</button>
       <div class="summary hidden" id="bp-summary"></div>
