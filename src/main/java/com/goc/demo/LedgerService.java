@@ -39,50 +39,50 @@ public class LedgerService {
     /** Ledger integration scenarios, grouped by what they exercise. */
     public static final List<ScenarioInfo> SCENARIOS = List.of(
             // Honest flow — should be ACCEPTED
-            new ScenarioInfo("SUFFICIENT", "Honest transfers", "Transfer with enough balance",
-                    "The happy path: a funded sender's valid transfer is accepted.", "ACCEPT"),
-            new ScenarioInfo("ACCUMULATE", "Honest transfers", "Incoming transfers add up",
-                    "Several incoming transfers sum correctly on the encrypted balance (homomorphic addition).", "ACCEPT"),
+            new ScenarioInfo("SUFFICIENT", "Honest transfers", "A normal payment when the sender has enough money",
+                    "Alice has enough balance and sends a valid payment to Bob. The ledger checks every proof and accepts the transfer. This is how an ordinary, honest payment is supposed to work.", "ACCEPT"),
+            new ScenarioInfo("ACCUMULATE", "Honest transfers", "Money received from several people adds up correctly",
+                    "Bob receives payments from two different senders. Even though all balances stay encrypted, the ledger adds the incoming amounts together correctly, so Bob ends up with the right total.", "ACCEPT"),
             // Overspend & balance attacks — should be REJECTED
-            new ScenarioInfo("INSUFFICIENT", "Overspend & balance attacks", "Overspend attempt (not enough)",
-                    "Spending more than you own: no valid new-balance proof exists, so it is blocked.", "REJECT"),
-            new ScenarioInfo("NO_FUNDS", "Overspend & balance attacks", "Account with no balance",
-                    "A sender with zero balance cannot transfer anything.", "REJECT"),
-            new ScenarioInfo("DOUBLE_SPEND", "Overspend & balance attacks", "Double-spend the same balance",
-                    "Two transfers built on the same balance — only one can succeed.", "REJECT"),
-            new ScenarioInfo("REPLAY", "Overspend & balance attacks", "Replay a past transaction",
-                    "Re-submitting an old transaction's proofs fails once the balance has moved.", "REJECT"),
+            new ScenarioInfo("INSUFFICIENT", "Overspend & balance attacks", "Trying to spend more money than you actually have",
+                    "Alice tries to send more than she owns. She cannot prove that her remaining balance would still be valid, so the ledger rejects the payment and the overspending is blocked.", "REJECT"),
+            new ScenarioInfo("NO_FUNDS", "Overspend & balance attacks", "Trying to send money from an empty account",
+                    "An account with a zero balance still tries to make a payment. Because there is no money to send, the ledger rejects the transfer.", "REJECT"),
+            new ScenarioInfo("DOUBLE_SPEND", "Overspend & balance attacks", "Trying to spend the same money twice at the same time",
+                    "Alice prepares two payments from the same starting balance, hoping both will go through. The ledger accepts only the first one and rejects the second, because by then her balance has already changed.", "REJECT"),
+            new ScenarioInfo("REPLAY", "Overspend & balance attacks", "Re-sending a payment that was already used",
+                    "Someone copies a payment that already went through and submits it a second time. The ledger sees that the balance no longer matches the old proof and rejects the replay.", "REJECT"),
             // Proof-integrity attacks — should be REJECTED
-            new ScenarioInfo("TAMPER", "Proof-integrity attacks", "Tampered equivalence proof",
-                    "Changing one number inside a valid proof is caught by the verifier.", "REJECT"),
-            new ScenarioInfo("AMOUNT_SPLICE", "Proof-integrity attacks", "Wrong amount (proof mismatch)",
-                    "The transferred ciphertext must match the amount proven by the range proof.", "REJECT"),
+            new ScenarioInfo("TAMPER", "Proof-integrity attacks", "Secretly editing a valid proof after it is made",
+                    "A correct payment is built, but afterwards one number inside its proof is quietly changed. When the ledger re-checks the proof, the math no longer adds up, so the payment is rejected.", "REJECT"),
+            new ScenarioInfo("AMOUNT_SPLICE", "Proof-integrity attacks", "Proving one amount but actually sending another",
+                    "Alice builds an honest proof for one amount but then tries to send a different amount. The ledger checks that the amount sent matches the amount proven, finds they differ, and rejects the transfer.", "REJECT"),
             // Identity & access control — should be REJECTED
-            new ScenarioInfo("IMPERSONATE", "Identity & access control", "Impersonating another account",
-                    "Proofs are bound to the registered key; sending with the wrong key fails.", "REJECT"),
-            new ScenarioInfo("UNREGISTERED", "Identity & access control", "Unregistered account sends",
-                    "An account whose public key is not registered cannot send.", "REJECT")
+            new ScenarioInfo("IMPERSONATE", "Identity & access control", "Pretending to be someone else to spend their money",
+                    "An attacker uses their own secret key but tries to send money out of Alice's account. The proofs do not match Alice's registered key, so the ledger rejects the attempt.", "REJECT"),
+            new ScenarioInfo("UNREGISTERED", "Identity & access control", "Sending from an account the ledger does not know",
+                    "An account that was never registered on the ledger tries to send money. Because the ledger has no record of its key, the transfer is rejected.", "REJECT")
     );
 
     /** Bulletproofs range-proof checks, grouped by what they exercise. */
     public static final List<ScenarioInfo> BP_SCENARIOS = List.of(
             // In-range values — should VERIFY
-            new ScenarioInfo("VALID", "Valid values (accepted)", "Valid value (42)",
-                    "A typical in-range value produces a proof that verifies.", "VERIFIED"),
-            new ScenarioInfo("SMALL", "Valid values (accepted)", "Small value (1)",
-                    "A low boundary value still verifies.", "VERIFIED"),
-            new ScenarioInfo("MAX", "Valid values (accepted)", "Maximum value (255 = 2⁸−1)",
-                    "The largest in-range value verifies.", "VERIFIED"),
+            new ScenarioInfo("VALID", "Valid values (accepted)", "A normal number that is inside the allowed range",
+                    "The number 42 is comfortably within the allowed range of 0 to 255. The proof is built correctly and the verifier accepts it.", "VERIFIED"),
+            new ScenarioInfo("SMALL", "Valid values (accepted)", "A very small number near the bottom of the range",
+                    "The number 1 sits right near the lowest end of the range. Its proof still works and is accepted, showing that small values are handled correctly.", "VERIFIED"),
+            new ScenarioInfo("MAX", "Valid values (accepted)", "The largest number that still fits in the range",
+                    "The number 255 is the biggest value that fits in 8 bits (2⁸ − 1). It is still inside the allowed range, so its proof is accepted.", "VERIFIED"),
             // Out-of-range values — should be REJECTED
-            new ScenarioInfo("NEGATIVE", "Out-of-range values (rejected)", "Negative value (−1)",
-                    "A negative value has no valid range proof.", "REJECTED"),
-            new ScenarioInfo("OUT_OF_RANGE", "Out-of-range values (rejected)", "Out of range (256)",
-                    "A value above 2⁸−1 cannot be proven in range.", "REJECTED"),
+            new ScenarioInfo("NEGATIVE", "Out-of-range values (rejected)", "A negative number, which the range does not allow",
+                    "The number −1 is below the allowed range. A range proof can only cover values of 0 and above, so no valid proof exists and it is rejected.", "REJECTED"),
+            new ScenarioInfo("OUT_OF_RANGE", "Out-of-range values (rejected)", "A number that is too big for the range",
+                    "The number 256 is just above the 8-bit limit, whose highest value is 255. It does not fit in the range, so the proof fails and is rejected.", "REJECTED"),
             // Malformed proofs / verifiers — should be REJECTED
-            new ScenarioInfo("BIT_MISMATCH", "Malformed proofs (rejected)", "Wrong bit-length verifier",
-                    "Verifying a proof against a different bit-length fails.", "REJECTED"),
-            new ScenarioInfo("TAMPERED", "Malformed proofs (rejected)", "Tampered proof (flipped byte)",
-                    "Flipping a byte in a valid proof makes verification fail.", "REJECTED")
+            new ScenarioInfo("BIT_MISMATCH", "Malformed proofs (rejected)", "Checking a proof with the wrong range settings",
+                    "A proof made for an 8-bit range is checked using a 16-bit verifier. The settings do not match the ones the proof was built with, so the verifier rejects it.", "REJECTED"),
+            new ScenarioInfo("TAMPERED", "Malformed proofs (rejected)", "A proof that was altered after it was created",
+                    "A valid proof has a single byte flipped after it was built. The verifier detects the change and rejects the corrupted proof.", "REJECTED")
     );
 
     public List<ScenarioInfo> scenarios() {
@@ -188,9 +188,10 @@ public class LedgerService {
             return new TransferResult(false,
                     List.of("Sender and receiver must be different"), state());
         }
-        if (amount < 0) {
+        if (amount <= 0) {
             return new TransferResult(false,
-                    List.of("Amount cannot be negative"), state());
+                    List.of("Amount must be greater than 0 — a transfer of 0 moves no money and is not allowed."),
+                    state());
         }
         Session.TransferOutcome outcome = session.transfer(sender, receiver, amount, mode);
         return new TransferResult(outcome.accepted(), outcome.log(), state());

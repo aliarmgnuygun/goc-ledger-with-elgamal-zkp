@@ -143,7 +143,7 @@
         <div class="row">
           <div class="field"><label>Sender</label><select id="t-sender"></select></div>
           <div class="field"><label>Receiver</label><select id="t-receiver"></select></div>
-          <div class="field"><label>Amount</label><input id="t-amount" type="number" value="5" min="0"></div>
+          <div class="field"><label>Amount</label><input id="t-amount" type="number" value="5" min="1"></div>
           <div class="field">
             <label>Scenario</label>
             <select id="t-mode">
@@ -192,6 +192,13 @@
       <p class="hint">Bulletproofs cannot drive a ledger transfer (it has no equivalence proof), so it is
         tested at the <b>range-proof</b> level only: each check proves — or fails to prove — that a value
         lies in <code>[0, 2⁸)</code>. Click a title for the step-by-step log.</p>
+      <div class="callout">
+        <span class="tag">Why 2⁸ (values 0–255)?</span>
+        Bulletproofs itself supports any power-of-two range — 16, 32, 64 bits and beyond. These tests fix
+        the range at <b>8 bits</b> on purpose: it keeps the numbers small and easy to follow, it runs
+        instantly, and it matches the 8-bit range the rest of the demo uses. So <code>2⁸</code> is just
+        this demo's chosen size, not a limit of Bulletproofs.
+      </div>
       <button id="bp-runall">Run all</button>
       <div class="summary hidden" id="bp-summary"></div>
       <table id="bp-table" class="hidden">
