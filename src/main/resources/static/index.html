@@ -58,6 +58,15 @@
   .hidden { display:none; }
   .kv { color:var(--muted); font-size:12.5px; margin-top:8px; }
   .note { color:var(--muted); font-size:12.5px; margin-top:10px; font-style:italic; }
+  .callout { background:var(--panel2); border:1px solid var(--line); border-left:3px solid var(--accent);
+    border-radius:8px; padding:12px 14px; margin:12px 0; font-size:13px; color:var(--txt); line-height:1.6; }
+  .callout.warn { border-left-color:var(--amber); }
+  .callout b { color:#fff; }
+  .callout code { font-family:var(--mono); font-size:12px; background:rgba(255,255,255,.06);
+    padding:1px 5px; border-radius:4px; }
+  .callout .tag { display:block; font-weight:700; font-size:11px; text-transform:uppercase;
+    letter-spacing:.5px; margin-bottom:6px; color:var(--accent); }
+  .callout.warn .tag { color:var(--amber); }
   .scn-title { cursor:pointer; }
   .scn-title:hover { color:#fff; }
   .summary { font-weight:700; margin:10px 0 4px; }
@@ -72,53 +81,19 @@
 <main>
   <section id="tab-ledger">
 
-    <!-- A) Preset scenario suite -->
+    <!-- A) Live / free-form transfer — the real, interactive scenario -->
     <div class="panel">
-      <h2>Ready-made Scenarios <span class="sub">— identical to the integration tests (7/7)</span></h2>
-      <p class="hint">Each scenario runs the same steps as the JUnit test on its own fresh ledger.
-        The result is compared with the expected one. Click a title to open the step-by-step log.</p>
-      <div class="row">
-        <div class="field">
-          <label>Backend</label>
-          <select id="s-backend">
-            <option value="EC">EC (Ristretto255)</option>
-            <option value="DL">DL (ElGamal 2048-bit)</option>
-          </select>
-        </div>
-        <button id="s-runall">Run all</button>
-      </div>
-      <div class="summary hidden" id="s-summary"></div>
-      <table id="s-table" class="hidden">
-        <thead><tr><th>Scenario</th><th>Expected</th><th>Result</th><th>Status</th></tr></thead>
-        <tbody id="s-rows"></tbody>
-      </table>
-    </div>
-
-    <!-- A2) Bulletproofs range-proof tests -->
-    <div class="panel">
-      <h2>Bulletproofs — Range Proof Tests <span class="sub">— range-proof level, not the ledger</span></h2>
-      <p class="hint">Bulletproofs cannot drive a ledger transfer (it has no equivalence proof), but it is
-        tested at the <b>range-proof</b> level: it proves that a value lies in <code>[0, 2⁸)</code>.
-        These 6 tests match <code>BulletproofRangeProverTest</code> one to one. Click a title to open the
-        step-by-step log.</p>
-      <button id="bp-runall">Run all</button>
-      <div class="summary hidden" id="bp-summary"></div>
-      <table id="bp-table" class="hidden">
-        <thead><tr><th>Test</th><th>Expected</th><th>Result</th><th>Status</th></tr></thead>
-        <tbody id="bp-rows"></tbody>
-      </table>
-    </div>
-
-    <!-- B) Manual / free-form transfer -->
-    <div class="panel">
-      <h2>Manual Transfer <span class="sub">— free experiment</span></h2>
+      <h2>Live Transfer <span class="sub">— a real transaction on your own encrypted ledger</span></h2>
       <p class="hint">Three accounts (Alice=20, Bob=10, Carol=5) start with encrypted balances.
         Pick a sender, a receiver and an amount, then try an honest transfer or an attack.</p>
-      <p class="note">Note: the ledger flow works only with DL and EC. Bulletproofs is not here because a
-        transfer needs, in addition to a range proof, a <b>ciphertext-equivalence</b> proof (new balance =
-        current − amount); the Bulletproofs library we use only gives a standalone range proof and cannot
-        produce an equality proof inside the same ElGamal scheme. The speed/size comparison of the three
-        schemes is done in the benchmark charts.</p>
+      <div class="callout">
+        <span class="tag">Why only DL &amp; EC here?</span>
+        The live ledger runs only with <b>DL</b> and <b>EC</b>. A transfer needs, on top of a range proof,
+        a <b>ciphertext-equivalence</b> proof (new balance = current − amount). The Bulletproofs library we
+        use only produces a <i>standalone</i> range proof and cannot output an equality proof inside the
+        same ElGamal scheme — so it can't drive a transfer. The speed/size comparison of all three schemes
+        lives in the benchmark charts.
+      </div>
       <div class="row">
         <div class="field">
           <label>Backend</label>
@@ -133,16 +108,26 @@
         </div>
         <button id="l-init">Start ledger</button>
       </div>
-      <p class="note">Warning: a larger bit length makes a transfer slower. EC stays fast at 32-bit
-        (~0.3 s), but DL at 32-bit can take ~20 s per transfer (2048-bit modPow × 32 bits). If you want to
-        try 32-bit, we recommend EC; this is the live version of the "DL is the slowest" finding in the
-        charts.</p>
+      <div class="callout warn">
+        <span class="tag">Heads-up: a larger bit length is slower</span>
+        The <b>bit length</b> sets the range proof width (it proves the amount lies in <code>[0, 2ⁿ)</code>).
+        EC stays fast at 32-bit (~0.3 s), but DL at 32-bit can take ~20 s per transfer (2048-bit modPow ×
+        32 bits). For 32-bit we recommend EC — this is the live version of the "DL is the slowest" finding
+        in the charts.
+      </div>
 
       <div class="hidden" id="l-statepanel" style="margin-top:18px;">
         <table>
           <thead><tr><th>Account</th><th>Encrypted balance (what the network sees)</th><th>Plain balance (key owner)</th></tr></thead>
           <tbody id="l-accounts"></tbody>
         </table>
+        <div class="callout">
+          <span class="tag">Reading the ciphertext</span>
+          Each balance is an ElGamal ciphertext of two group elements (<code>c1</code>, <code>c2</code>).
+          The hex is truncated with <code>…</code>, but the byte count is real: an <b>EC</b> element is
+          <b>32 bytes</b> (Ristretto255 ≈ 256-bit group), a <b>DL</b> element is <b>256 bytes</b>
+          (ElGamal 2048-bit group). That ~8× size gap is exactly the EC-vs-DL trade-off.
+        </div>
         <div class="note" id="l-note"></div>
       </div>
 
@@ -165,6 +150,43 @@
         <div id="t-verdict" style="margin-top:14px;"></div>
         <div class="log hidden" id="t-log"></div>
       </div>
+    </div>
+
+    <!-- B) Preset scenario suite -->
+    <div class="panel">
+      <h2>Ready-made Scenarios <span class="sub">— identical to the integration tests (7/7)</span></h2>
+      <p class="hint">Each scenario runs the same steps as the JUnit test on its own fresh ledger.
+        The result is compared with the expected one. Click a title to open the step-by-step log.</p>
+      <div class="row">
+        <div class="field">
+          <label>Backend</label>
+          <select id="s-backend">
+            <option value="EC">EC (Ristretto255)</option>
+            <option value="DL">DL (ElGamal 2048-bit)</option>
+          </select>
+        </div>
+        <button id="s-runall">Run all</button>
+      </div>
+      <div class="summary hidden" id="s-summary"></div>
+      <table id="s-table" class="hidden">
+        <thead><tr><th>Scenario</th><th>Expected</th><th>Result</th><th>Status</th></tr></thead>
+        <tbody id="s-rows"></tbody>
+      </table>
+    </div>
+
+    <!-- C) Bulletproofs range-proof tests -->
+    <div class="panel">
+      <h2>Bulletproofs — Range Proof Tests <span class="sub">— range-proof level, not the ledger</span></h2>
+      <p class="hint">Bulletproofs cannot drive a ledger transfer (it has no equivalence proof), but it is
+        tested at the <b>range-proof</b> level: it proves that a value lies in <code>[0, 2⁸)</code>.
+        These 6 tests match <code>BulletproofRangeProverTest</code> one to one. Click a title to open the
+        step-by-step log.</p>
+      <button id="bp-runall">Run all</button>
+      <div class="summary hidden" id="bp-summary"></div>
+      <table id="bp-table" class="hidden">
+        <thead><tr><th>Test</th><th>Expected</th><th>Result</th><th>Status</th></tr></thead>
+        <tbody id="bp-rows"></tbody>
+      </table>
     </div>
   </section>
 </main>

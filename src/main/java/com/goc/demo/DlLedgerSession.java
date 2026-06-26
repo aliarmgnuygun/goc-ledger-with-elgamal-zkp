@@ -246,7 +246,8 @@ public class DlLedgerSession implements LedgerService.Session {
         StringBuilder sb = new StringBuilder();
         for (byte x : b) sb.append(String.format("%02x", x));
         String h = sb.toString();
-        return h.length() > 40 ? h.substring(0, 20) + "…" + h.substring(h.length() - 20) : h;
+        String shown = h.length() > 40 ? h.substring(0, 20) + "…" + h.substring(h.length() - 20) : h;
+        return shown + "  (" + b.length + " bytes)";
     }
 
     private static String shortHex(BigInteger v) {
