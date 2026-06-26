@@ -35,8 +35,8 @@
   button:hover { filter:brightness(1.1); }
   button:disabled { opacity:.6; cursor:default; }
   button.ghost { background:var(--panel2); border:1px solid var(--line); }
-  h2 { font-size:15px; margin:0 0 6px; }
-  h2 .sub { font-weight:400; color:var(--muted); font-size:12.5px; }
+  h2 { font-size:18px; margin:0 0 8px; font-weight:700; }
+  h2 .sub { font-weight:400; color:var(--muted); font-size:13px; }
   .hint { color:var(--muted); font-size:13px; margin:8px 0 16px; }
   table { width:100%; border-collapse:collapse; font-size:14px; }
   th,td { text-align:left; padding:10px 8px; border-bottom:1px solid var(--line); vertical-align:top; }
@@ -69,6 +69,13 @@
   .callout.warn .tag { color:var(--amber); }
   .scn-title { cursor:pointer; }
   .scn-title:hover { color:#fff; }
+  .scn-desc { color:var(--muted); font-size:12.5px; font-weight:400; margin-top:3px; }
+  .grouphead td { background:var(--panel2); color:var(--txt); font-weight:700; font-size:12px;
+    text-transform:uppercase; letter-spacing:.5px; padding:9px 8px; }
+  .tag-extra, .tag-junit { display:inline-block; font-size:10px; font-weight:700; text-transform:uppercase;
+    letter-spacing:.4px; padding:1px 6px; border-radius:999px; vertical-align:middle; margin-left:8px; }
+  .tag-junit { background:rgba(59,130,246,.15); color:#93c5fd; }
+  .tag-extra { background:rgba(245,158,11,.15); color:#fbbf24; }
   .summary { font-weight:700; margin:10px 0 4px; }
 </style>
 </head>
@@ -78,8 +85,13 @@
   <p>Private transfers over encrypted balances, verified without revealing any value.</p>
 </header>
 
+<nav class="tabs">
+  <div class="tab active" data-tab="live">Live Transfer</div>
+  <div class="tab" data-tab="tests">Test Suite</div>
+</nav>
+
 <main>
-  <section id="tab-ledger">
+  <section id="tab-live">
 
     <!-- A) Live / free-form transfer — the real, interactive scenario -->
     <div class="panel">
@@ -151,12 +163,19 @@
         <div class="log hidden" id="t-log"></div>
       </div>
     </div>
+  </section>
+
+  <section id="tab-tests" class="hidden">
 
     <!-- B) Preset scenario suite -->
     <div class="panel">
-      <h2>Ready-made Scenarios <span class="sub">— identical to the integration tests (7/7)</span></h2>
-      <p class="hint">Each scenario runs the same steps as the JUnit test on its own fresh ledger.
-        The result is compared with the expected one. Click a title to open the step-by-step log.</p>
+      <h2>Ledger Scenarios <span class="sub">— end-to-end integration tests on the full ledger</span></h2>
+      <p class="hint">Each scenario runs a whole transfer flow (range proof + equivalence proof + ledger
+        check) on its own fresh ledger and compares the verdict with the expected one.
+        <b>7 of 10</b> mirror <code>LedgerIntegrationTest</code> / <code>ECLedgerIntegrationTest</code>
+        one-to-one (tagged <span class="tag-junit">JUnit</span>); the other 3
+        (<span class="tag-extra">demo</span>) are extra attack demos. Click a title for the
+        step-by-step log.</p>
       <div class="row">
         <div class="field">
           <label>Backend</label>
@@ -176,10 +195,12 @@
 
     <!-- C) Bulletproofs range-proof tests -->
     <div class="panel">
-      <h2>Bulletproofs — Range Proof Tests <span class="sub">— range-proof level, not the ledger</span></h2>
-      <p class="hint">Bulletproofs cannot drive a ledger transfer (it has no equivalence proof), but it is
-        tested at the <b>range-proof</b> level: it proves that a value lies in <code>[0, 2⁸)</code>.
-        These 6 tests match <code>BulletproofRangeProverTest</code> one to one. Click a title to open the
+      <h2>Bulletproofs — Range-Proof Tests <span class="sub">— component-level unit tests, not the ledger</span></h2>
+      <p class="hint">Bulletproofs cannot drive a ledger transfer (it has no equivalence proof), so it is
+        tested at the <b>range-proof</b> level only: each check proves — or fails to prove — that a value
+        lies in <code>[0, 2⁸)</code>. <b>6 of 7</b> mirror <code>BulletproofRangeProverTest</code>
+        one-to-one (tagged <span class="tag-junit">JUnit</span>); the other 1
+        (<span class="tag-extra">demo</span>) is an extra tamper check. Click a title for the
         step-by-step log.</p>
       <button id="bp-runall">Run all</button>
       <div class="summary hidden" id="bp-summary"></div>
@@ -209,17 +230,24 @@ async function loadScenarios(){
   if (scenarioList.length) return;
   scenarioList = await get('/api/ledger/scenarios');
 }
+function suiteTag(s){ return s.inSuite
+  ? `<span class="tag-junit">JUnit</span>` : `<span class="tag-extra">demo</span>`; }
 function renderScenarioRows(){
   $('s-table').classList.remove('hidden');
-  $('s-rows').innerHTML = scenarioList.map(s=>`
-    <tr data-id="${s.id}">
-      <td class="scn-title" onclick="toggleLog('${s.id}')"><b>${s.title}</b></td>
-      <td><span class="badge sm ${s.expected==='ACCEPT'?'ok':'no'}">${s.expected}</span></td>
-      <td id="res-${s.id}">–</td>
-      <td id="stat-${s.id}">–</td>
-    </tr>
-    <tr class="hidden" id="logrow-${s.id}"><td colspan="4"><div class="log" id="log-${s.id}"></div></td></tr>
-  `).join('');
+  let html='', lastGroup=null;
+  for(const s of scenarioList){
+    if(s.group!==lastGroup){ lastGroup=s.group;
+      html+=`<tr class="grouphead"><td colspan="4">${s.group}</td></tr>`; }
+    html+=`
+      <tr data-id="${s.id}">
+        <td class="scn-title" onclick="toggleLog('${s.id}')"><b>${s.title}</b>${suiteTag(s)}<div class="scn-desc">${s.desc}</div></td>
+        <td><span class="badge sm ${s.expected==='ACCEPT'?'ok':'no'}">${s.expected}</span></td>
+        <td id="res-${s.id}">–</td>
+        <td id="stat-${s.id}">–</td>
+      </tr>
+      <tr class="hidden" id="logrow-${s.id}"><td colspan="4"><div class="log" id="log-${s.id}"></div></td></tr>`;
+  }
+  $('s-rows').innerHTML = html;
 }
 window.toggleLog = id => { const r=$('logrow-'+id); if(r) r.classList.toggle('hidden'); };
 
@@ -253,15 +281,20 @@ function bpPositive(expected){ return expected === 'VERIFIED'; }
 async function loadBp(){ if(!bpList.length) bpList = await get('/api/bp/scenarios'); }
 function renderBpRows(){
   $('bp-table').classList.remove('hidden');
-  $('bp-rows').innerHTML = bpList.map(s=>`
-    <tr data-id="${s.id}">
-      <td class="scn-title" onclick="toggleLog('bp-${s.id}')"><b>${s.title}</b></td>
-      <td><span class="badge sm ${bpPositive(s.expected)?'ok':'no'}">${s.expected}</span></td>
-      <td id="bpres-${s.id}">–</td>
-      <td id="bpstat-${s.id}">–</td>
-    </tr>
-    <tr class="hidden" id="logrow-bp-${s.id}"><td colspan="4"><div class="log" id="log-bp-${s.id}"></div></td></tr>
-  `).join('');
+  let html='', lastGroup=null;
+  for(const s of bpList){
+    if(s.group!==lastGroup){ lastGroup=s.group;
+      html+=`<tr class="grouphead"><td colspan="4">${s.group}</td></tr>`; }
+    html+=`
+      <tr data-id="${s.id}">
+        <td class="scn-title" onclick="toggleLog('bp-${s.id}')"><b>${s.title}</b>${suiteTag(s)}<div class="scn-desc">${s.desc}</div></td>
+        <td><span class="badge sm ${bpPositive(s.expected)?'ok':'no'}">${s.expected}</span></td>
+        <td id="bpres-${s.id}">–</td>
+        <td id="bpstat-${s.id}">–</td>
+      </tr>
+      <tr class="hidden" id="logrow-bp-${s.id}"><td colspan="4"><div class="log" id="log-bp-${s.id}"></div></td></tr>`;
+  }
+  $('bp-rows').innerHTML = html;
 }
 async function runBp(id){
   const res = await post('/api/bp/scenario', { id });
@@ -328,6 +361,16 @@ $('t-send').onclick = async () => {
     renderState(res.state);
   } finally { $('t-send').disabled=false; $('t-send').textContent='Send transaction'; }
 };
+
+// ---- tab switching ----
+document.querySelectorAll('.tab').forEach(t => {
+  t.onclick = () => {
+    document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+    t.classList.add('active');
+    $('tab-live').classList.toggle('hidden', t.dataset.tab !== 'live');
+    $('tab-tests').classList.toggle('hidden', t.dataset.tab !== 'tests');
+  };
+});
 </script>
 </body>
 </html>

@@ -22,34 +22,76 @@ public class LedgerService {
 
     public record TransferResult(boolean accepted, List<String> log, LedgerState state) {}
 
-    public record ScenarioInfo(String id, String title, String expected) {}
+    /**
+     * One demo scenario.
+     *
+     * @param group    section it is shown under (so related checks sit together)
+     * @param title    short, human-readable name
+     * @param desc     one line on WHAT the scenario verifies (not how)
+     * @param expected the verdict the verifier should reach
+     * @param inSuite  true if it mirrors a real JUnit test; false if it is a demo-only extra
+     */
+    public record ScenarioInfo(String id, String group, String title, String desc,
+                               String expected, boolean inSuite) {}
 
     public record ScenarioResult(String id, String title, String expected,
                                  boolean accepted, boolean passed, List<String> log) {}
 
-    /** The seven ledger integration-test scenarios, mirrored 1:1 in the demo. */
+    /**
+     * Ledger integration scenarios, grouped by what they exercise. The first 7
+     * mirror {@code LedgerIntegrationTest}/{@code ECLedgerIntegrationTest} 1:1;
+     * the 3 marked {@code inSuite=false} are demo-only attack extras.
+     */
     public static final List<ScenarioInfo> SCENARIOS = List.of(
-            new ScenarioInfo("SUFFICIENT",   "Transfer with enough balance",       "ACCEPT"),
-            new ScenarioInfo("INSUFFICIENT", "Overspend attempt (not enough)",     "REJECT"),
-            new ScenarioInfo("TAMPER",       "Tampered equivalence proof",         "REJECT"),
-            new ScenarioInfo("IMPERSONATE",  "Impersonating another account",      "REJECT"),
-            new ScenarioInfo("NO_FUNDS",     "Account with no balance",            "REJECT"),
-            new ScenarioInfo("UNREGISTERED", "Unregistered account sends",         "REJECT"),
-            new ScenarioInfo("ACCUMULATE",   "Incoming transfers add up",          "ACCEPT"),
-            new ScenarioInfo("REPLAY",        "Replay a past transaction",          "REJECT"),
-            new ScenarioInfo("DOUBLE_SPEND",  "Double-spend the same balance",      "REJECT"),
-            new ScenarioInfo("AMOUNT_SPLICE", "Wrong amount (proof mismatch)",      "REJECT")
+            // Honest flow — should be ACCEPTED
+            new ScenarioInfo("SUFFICIENT", "Honest transfers", "Transfer with enough balance",
+                    "The happy path: a funded sender's valid transfer is accepted.", "ACCEPT", true),
+            new ScenarioInfo("ACCUMULATE", "Honest transfers", "Incoming transfers add up",
+                    "Several incoming transfers sum correctly on the encrypted balance (homomorphic addition).", "ACCEPT", true),
+            // Overspend & balance attacks — should be REJECTED
+            new ScenarioInfo("INSUFFICIENT", "Overspend & balance attacks", "Overspend attempt (not enough)",
+                    "Spending more than you own: no valid new-balance proof exists, so it is blocked.", "REJECT", true),
+            new ScenarioInfo("NO_FUNDS", "Overspend & balance attacks", "Account with no balance",
+                    "A sender with zero balance cannot transfer anything.", "REJECT", true),
+            new ScenarioInfo("DOUBLE_SPEND", "Overspend & balance attacks", "Double-spend the same balance",
+                    "Two transfers built on the same balance — only one can succeed.", "REJECT", false),
+            new ScenarioInfo("REPLAY", "Overspend & balance attacks", "Replay a past transaction",
+                    "Re-submitting an old transaction's proofs fails once the balance has moved.", "REJECT", false),
+            // Proof-integrity attacks — should be REJECTED
+            new ScenarioInfo("TAMPER", "Proof-integrity attacks", "Tampered equivalence proof",
+                    "Changing one number inside a valid proof is caught by the verifier.", "REJECT", true),
+            new ScenarioInfo("AMOUNT_SPLICE", "Proof-integrity attacks", "Wrong amount (proof mismatch)",
+                    "The transferred ciphertext must match the amount proven by the range proof.", "REJECT", false),
+            // Identity & access control — should be REJECTED
+            new ScenarioInfo("IMPERSONATE", "Identity & access control", "Impersonating another account",
+                    "Proofs are bound to the registered key; sending with the wrong key fails.", "REJECT", true),
+            new ScenarioInfo("UNREGISTERED", "Identity & access control", "Unregistered account sends",
+                    "An account whose public key is not registered cannot send.", "REJECT", true)
     );
 
-    /** Bulletproofs range-proof correctness checks (mirrors the JUnit unit tests). */
+    /**
+     * Bulletproofs range-proof checks. The first 6 mirror
+     * {@code BulletproofRangeProverTest} 1:1; the {@code inSuite=false} one is a
+     * demo-only tamper extra.
+     */
     public static final List<ScenarioInfo> BP_SCENARIOS = List.of(
-            new ScenarioInfo("VALID",        "Valid value (42)",                   "VERIFIED"),
-            new ScenarioInfo("SMALL",        "Small value (1)",                    "VERIFIED"),
-            new ScenarioInfo("MAX",          "Maximum value (255 = 2⁸−1)",         "VERIFIED"),
-            new ScenarioInfo("NEGATIVE",     "Negative value (−1)",                "REJECTED"),
-            new ScenarioInfo("OUT_OF_RANGE", "Out of range (256)",                 "REJECTED"),
-            new ScenarioInfo("BIT_MISMATCH", "Wrong bit-length verifier",          "REJECTED"),
-            new ScenarioInfo("TAMPERED",     "Tampered proof (flipped byte)",      "REJECTED")
+            // In-range values — should VERIFY
+            new ScenarioInfo("VALID", "Valid values (accepted)", "Valid value (42)",
+                    "A typical in-range value produces a proof that verifies.", "VERIFIED", true),
+            new ScenarioInfo("SMALL", "Valid values (accepted)", "Small value (1)",
+                    "A low boundary value still verifies.", "VERIFIED", true),
+            new ScenarioInfo("MAX", "Valid values (accepted)", "Maximum value (255 = 2⁸−1)",
+                    "The largest in-range value verifies.", "VERIFIED", true),
+            // Out-of-range values — should be REJECTED
+            new ScenarioInfo("NEGATIVE", "Out-of-range values (rejected)", "Negative value (−1)",
+                    "A negative value has no valid range proof.", "REJECTED", true),
+            new ScenarioInfo("OUT_OF_RANGE", "Out-of-range values (rejected)", "Out of range (256)",
+                    "A value above 2⁸−1 cannot be proven in range.", "REJECTED", true),
+            // Malformed proofs / verifiers — should be REJECTED
+            new ScenarioInfo("BIT_MISMATCH", "Malformed proofs (rejected)", "Wrong bit-length verifier",
+                    "Verifying a proof against a different bit-length fails.", "REJECTED", true),
+            new ScenarioInfo("TAMPERED", "Malformed proofs (rejected)", "Tampered proof (flipped byte)",
+                    "Flipping a byte in a valid proof makes verification fail.", "REJECTED", false)
     );
 
     public List<ScenarioInfo> scenarios() {
