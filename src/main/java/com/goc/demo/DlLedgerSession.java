@@ -241,13 +241,19 @@ public class DlLedgerSession implements LedgerService.Session {
         return crypto.babyStepGiantStepLog(gm, DECRYPT_BOUND, group).longValueExact();
     }
 
+    // Canonical field-element width: every group element is a number mod p, so it
+    // serialises to ceil(bitlen(p)/8) bytes (256 for a 2048-bit group). We report
+    // this fixed size rather than BigInteger.toByteArray().length, which would
+    // wobble to 257 whenever the value's top bit forces a two's-complement 0x00.
+    private static final int FIELD_BYTES = (P_2048.bitLength() + 7) / 8;
+
     private static String hex(BigInteger v) {
         byte[] b = v.toByteArray();
         StringBuilder sb = new StringBuilder();
         for (byte x : b) sb.append(String.format("%02x", x));
         String h = sb.toString();
         String shown = h.length() > 40 ? h.substring(0, 20) + "…" + h.substring(h.length() - 20) : h;
-        return shown + "  (" + b.length + " bytes)";
+        return shown + "  (" + FIELD_BYTES + " bytes)";
     }
 
     private static String shortHex(BigInteger v) {
