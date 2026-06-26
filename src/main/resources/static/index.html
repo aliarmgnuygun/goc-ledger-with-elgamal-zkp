@@ -72,10 +72,6 @@
   .scn-desc { color:var(--muted); font-size:12.5px; font-weight:400; margin-top:3px; }
   .grouphead td { background:var(--panel2); color:var(--txt); font-weight:700; font-size:12px;
     text-transform:uppercase; letter-spacing:.5px; padding:9px 8px; }
-  .tag-extra, .tag-junit { display:inline-block; font-size:10px; font-weight:700; text-transform:uppercase;
-    letter-spacing:.4px; padding:1px 6px; border-radius:999px; vertical-align:middle; margin-left:8px; }
-  .tag-junit { background:rgba(59,130,246,.15); color:#93c5fd; }
-  .tag-extra { background:rgba(245,158,11,.15); color:#fbbf24; }
   .summary { font-weight:700; margin:10px 0 4px; }
 </style>
 </head>
@@ -171,11 +167,8 @@
     <div class="panel">
       <h2>Ledger Scenarios <span class="sub">— end-to-end integration tests on the full ledger</span></h2>
       <p class="hint">Each scenario runs a whole transfer flow (range proof + equivalence proof + ledger
-        check) on its own fresh ledger and compares the verdict with the expected one.
-        <b>7 of 10</b> mirror <code>LedgerIntegrationTest</code> / <code>ECLedgerIntegrationTest</code>
-        one-to-one (tagged <span class="tag-junit">JUnit</span>); the other 3
-        (<span class="tag-extra">demo</span>) are extra attack demos. Click a title for the
-        step-by-step log.</p>
+        check) on its own fresh ledger and compares the verdict with the expected one. Click a title for
+        the step-by-step log.</p>
       <div class="row">
         <div class="field">
           <label>Backend</label>
@@ -198,10 +191,7 @@
       <h2>Bulletproofs — Range-Proof Tests <span class="sub">— component-level unit tests, not the ledger</span></h2>
       <p class="hint">Bulletproofs cannot drive a ledger transfer (it has no equivalence proof), so it is
         tested at the <b>range-proof</b> level only: each check proves — or fails to prove — that a value
-        lies in <code>[0, 2⁸)</code>. <b>6 of 7</b> mirror <code>BulletproofRangeProverTest</code>
-        one-to-one (tagged <span class="tag-junit">JUnit</span>); the other 1
-        (<span class="tag-extra">demo</span>) is an extra tamper check. Click a title for the
-        step-by-step log.</p>
+        lies in <code>[0, 2⁸)</code>. Click a title for the step-by-step log.</p>
       <button id="bp-runall">Run all</button>
       <div class="summary hidden" id="bp-summary"></div>
       <table id="bp-table" class="hidden">
@@ -230,8 +220,6 @@ async function loadScenarios(){
   if (scenarioList.length) return;
   scenarioList = await get('/api/ledger/scenarios');
 }
-function suiteTag(s){ return s.inSuite
-  ? `<span class="tag-junit">JUnit</span>` : `<span class="tag-extra">demo</span>`; }
 function renderScenarioRows(){
   $('s-table').classList.remove('hidden');
   let html='', lastGroup=null;
@@ -240,7 +228,7 @@ function renderScenarioRows(){
       html+=`<tr class="grouphead"><td colspan="4">${s.group}</td></tr>`; }
     html+=`
       <tr data-id="${s.id}">
-        <td class="scn-title" onclick="toggleLog('${s.id}')"><b>${s.title}</b>${suiteTag(s)}<div class="scn-desc">${s.desc}</div></td>
+        <td class="scn-title" onclick="toggleLog('${s.id}')"><b>${s.title}</b><div class="scn-desc">${s.desc}</div></td>
         <td><span class="badge sm ${s.expected==='ACCEPT'?'ok':'no'}">${s.expected}</span></td>
         <td id="res-${s.id}">–</td>
         <td id="stat-${s.id}">–</td>
@@ -287,7 +275,7 @@ function renderBpRows(){
       html+=`<tr class="grouphead"><td colspan="4">${s.group}</td></tr>`; }
     html+=`
       <tr data-id="${s.id}">
-        <td class="scn-title" onclick="toggleLog('bp-${s.id}')"><b>${s.title}</b>${suiteTag(s)}<div class="scn-desc">${s.desc}</div></td>
+        <td class="scn-title" onclick="toggleLog('bp-${s.id}')"><b>${s.title}</b><div class="scn-desc">${s.desc}</div></td>
         <td><span class="badge sm ${bpPositive(s.expected)?'ok':'no'}">${s.expected}</span></td>
         <td id="bpres-${s.id}">–</td>
         <td id="bpstat-${s.id}">–</td>
