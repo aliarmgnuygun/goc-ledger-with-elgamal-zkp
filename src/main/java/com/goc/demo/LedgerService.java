@@ -68,19 +68,19 @@ public class LedgerService {
     public static final List<ScenarioInfo> BP_SCENARIOS = List.of(
             // In-range values — should VERIFY
             new ScenarioInfo("VALID", "Valid values (accepted)", "A normal number that is inside the allowed range",
-                    "The number 42 is comfortably within the allowed range of 0 to 255. The proof is built correctly and the verifier accepts it.", "VERIFIED"),
+                    "The number 42 is comfortably within the allowed range of 0 to about 4.3 billion (2³² − 1). The proof is built correctly and the verifier accepts it.", "VERIFIED"),
             new ScenarioInfo("SMALL", "Valid values (accepted)", "A very small number near the bottom of the range",
                     "The number 1 sits right near the lowest end of the range. Its proof still works and is accepted, showing that small values are handled correctly.", "VERIFIED"),
             new ScenarioInfo("MAX", "Valid values (accepted)", "The largest number that still fits in the range",
-                    "The number 255 is the biggest value that fits in 8 bits (2⁸ − 1). It is still inside the allowed range, so its proof is accepted.", "VERIFIED"),
+                    "The number 4,294,967,295 is the biggest value that fits in 32 bits (2³² − 1). It is still inside the allowed range, so its proof is accepted.", "VERIFIED"),
             // Out-of-range values — should be REJECTED
             new ScenarioInfo("NEGATIVE", "Out-of-range values (rejected)", "A negative number, which the range does not allow",
                     "The number −1 is below the allowed range. A range proof can only cover values of 0 and above, so no valid proof exists and it is rejected.", "REJECTED"),
             new ScenarioInfo("OUT_OF_RANGE", "Out-of-range values (rejected)", "A number that is too big for the range",
-                    "The number 256 is just above the 8-bit limit, whose highest value is 255. It does not fit in the range, so the proof fails and is rejected.", "REJECTED"),
+                    "The number 4,294,967,296 is just above the 32-bit limit, whose highest value is 4,294,967,295. It does not fit in the range, so the proof fails and is rejected.", "REJECTED"),
             // Malformed proofs / verifiers — should be REJECTED
             new ScenarioInfo("BIT_MISMATCH", "Malformed proofs (rejected)", "Checking a proof with the wrong range settings",
-                    "A proof made for an 8-bit range is checked using a 16-bit verifier. The settings do not match the ones the proof was built with, so the verifier rejects it.", "REJECTED"),
+                    "A proof made for a 32-bit range is checked using a 16-bit verifier. The settings do not match the ones the proof was built with, so the verifier rejects it.", "REJECTED"),
             new ScenarioInfo("TAMPERED", "Malformed proofs (rejected)", "A proof that was altered after it was created",
                     "A valid proof has a single byte flipped after it was built. The verifier detects the change and rejects the corrupted proof.", "REJECTED")
     );

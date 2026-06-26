@@ -168,8 +168,14 @@
       <h2>Ledger Scenarios <span class="sub">— end-to-end integration tests on the full ledger</span></h2>
       <p class="hint">Each scenario runs a whole transfer flow (range proof + equivalence proof + ledger
         check) on its own fresh ledger and compares the verdict with the expected one. Every scenario uses
-        a fixed <b>8-bit range</b> (amounts and balances stay in 0–255). Click a title for the step-by-step
-        log.</p>
+        a fixed <b>32-bit range</b> (amounts can go from 0 up to about 4.3 billion). Click a title for the
+        step-by-step log.</p>
+      <div class="callout warn">
+        <span class="tag">DL is slow at 32-bit</span>
+        With the <b>EC</b> backend the whole suite runs in well under a second. With <b>DL</b> (2048-bit
+        ElGamal) each transfer does a 32-bit range proof built from 32 modular exponentiations, so
+        "Run all" can take a couple of minutes. Pick EC if you just want to see the results quickly.
+      </div>
       <div class="row">
         <div class="field">
           <label>Backend</label>
@@ -192,14 +198,14 @@
       <h2>Bulletproofs — Range-Proof Tests <span class="sub">— component-level unit tests, not the ledger</span></h2>
       <p class="hint">Bulletproofs cannot drive a ledger transfer (it has no equivalence proof), so it is
         tested at the <b>range-proof</b> level only: each check proves — or fails to prove — that a value
-        lies in <code>[0, 2⁸)</code>. Click a title for the step-by-step log.</p>
+        lies in <code>[0, 2³²)</code>. Click a title for the step-by-step log.</p>
       <div class="callout">
-        <span class="tag">Why 2⁸ (values 0–255)?</span>
+        <span class="tag">Why 2³² (values 0 to ~4.3 billion)?</span>
         The range size has to be a power of two; our Bulletproofs library handles 4, 8, 16 and 32 bits
-        (these are the sizes the benchmark charts compare). These tests fix the range at <b>8 bits</b> on
-        purpose: it keeps the numbers small and easy to follow, it runs instantly, and it matches the 8-bit
-        range the rest of the demo uses. So <code>2⁸</code> is simply the size chosen here, not the only
-        one the proof can do.
+        (these are the sizes the benchmark charts compare). These tests use <b>32 bits</b> — the largest
+        the library supports — so values can run from 0 up to 2³²−1, matching the 32-bit range the rest of
+        the demo uses. So <code>2³²</code> is simply the size chosen here, not a hard limit of Bulletproofs
+        in general.
       </div>
       <button id="bp-runall">Run all</button>
       <div class="summary hidden" id="bp-summary"></div>

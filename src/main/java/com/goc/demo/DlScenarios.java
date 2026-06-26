@@ -21,7 +21,10 @@ import java.util.List;
  */
 public class DlScenarios {
 
-    private static final int BIT_LENGTH = 8;
+    private static final int BIT_LENGTH = 32;
+    // Demo balances are tiny; cap the discrete-log search independently of
+    // BIT_LENGTH so decryption stays fast even with a 32-bit range.
+    private static final long DECRYPT_BOUND = 1L << 16;
     private static final String[] NAMES = {"Alice", "Bob", "Carol"};
 
     private static final BigInteger P_2048 = new BigInteger(
@@ -67,7 +70,7 @@ public class DlScenarios {
 
         long decrypt(Ciphertext ct) {
             BigInteger gm = crypto.decryptToGroupElement(ct, kp.secretKey);
-            return crypto.babyStepGiantStepLog(gm, (1L << BIT_LENGTH) * 8L, group).longValueExact();
+            return crypto.babyStepGiantStepLog(gm, DECRYPT_BOUND, group).longValueExact();
         }
     }
 

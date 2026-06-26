@@ -25,7 +25,10 @@ import java.util.List;
  */
 public class EcScenarios {
 
-    private static final int BIT_LENGTH = 8;
+    private static final int BIT_LENGTH = 32;
+    // Demo balances are tiny; cap the discrete-log search independently of
+    // BIT_LENGTH so decryption stays fast even with a 32-bit range.
+    private static final long DECRYPT_BOUND = 1L << 16;
     private static final String[] NAMES = {"Alice", "Bob", "Carol"};
 
     /** Builds a fresh, registered, three-account context for a scenario. */
@@ -52,7 +55,7 @@ public class EcScenarios {
 
         long decrypt(ECCiphertext ct) {
             RistrettoElement gm = crypto.decryptToGroupElement(ct, kp.secretKey);
-            return crypto.babyStepGiantStepLog(gm, (1L << BIT_LENGTH) * 8L);
+            return crypto.babyStepGiantStepLog(gm, DECRYPT_BOUND);
         }
     }
 

@@ -19,15 +19,17 @@ import java.util.List;
  */
 public class BpScenarios {
 
-    private static final int BIT_LENGTH = 8;
+    private static final int BIT_LENGTH = 32;
+    private static final long MAX_IN_RANGE = (1L << BIT_LENGTH) - 1; // 2^32 - 1
+    private static final long FIRST_OUT_OF_RANGE = 1L << BIT_LENGTH;  // 2^32
 
     public boolean run(String id, List<String> log) {
         return switch (id) {
             case "VALID"        -> verifies(42L, log);
             case "SMALL"        -> verifies(1L, log);
-            case "MAX"          -> verifies(255L, log);   // 2^8 - 1
+            case "MAX"          -> verifies(MAX_IN_RANGE, log);
             case "NEGATIVE"     -> rejectedAtProving(-1L, log);
-            case "OUT_OF_RANGE" -> rejectedAtProving(256L, log); // 2^8
+            case "OUT_OF_RANGE" -> rejectedAtProving(FIRST_OUT_OF_RANGE, log);
             case "BIT_MISMATCH" -> bitMismatch(log);
             case "TAMPERED"     -> tampered(log);
             default -> { log.add("Unknown scenario: " + id); yield false; }
@@ -39,7 +41,7 @@ public class BpScenarios {
         var verifier = new BulletproofRangeVerifier(BIT_LENGTH);
         log.add("Step 1: Completeness — build an " + BIT_LENGTH + "-bit Bulletproof for the in-range value " + value + ".");
         BulletproofRangeProof proof = prover.prove(new BulletproofRangeWitness(value));
-        log.add("Step 2: The verifier checks that " + value + " lies inside [0, 2^8).");
+        log.add("Step 2: The verifier checks that " + value + " lies inside [0, 2^" + BIT_LENGTH + ").");
         boolean ok = verifier.verify(proof);
         log.add(ok ? "Result: VERIFIED ✓ — a valid in-range value is accepted."
                    : "Result: REJECTED ✗ — unexpected.");
@@ -54,7 +56,7 @@ public class BpScenarios {
             log.add("Result: VERIFIED — unexpected! An out-of-range value should not be provable.");
             return true; // proof produced (unexpected) → counts as "accepted"
         } catch (IllegalArgumentException e) {
-            log.add("Result: REJECTED ✗ — the prover refuses: a value outside [0, 2^8) has no valid proof (" + e.getMessage() + ").");
+            log.add("Result: REJECTED ✗ — the prover refuses: a value outside [0, 2^" + BIT_LENGTH + ") has no valid proof (" + e.getMessage() + ").");
             return false; // correctly rejected before any proof exists
         }
     }
@@ -62,7 +64,7 @@ public class BpScenarios {
     private boolean tampered(List<String> log) {
         var prover   = new BulletproofRangeProver(BIT_LENGTH);
         var verifier = new BulletproofRangeVerifier(BIT_LENGTH);
-        log.add("Step 1: Soundness — build a valid 8-bit Bulletproof for the value 42.");
+        log.add("Step 1: Soundness — build a valid " + BIT_LENGTH + "-bit Bulletproof for the value 42.");
         BulletproofRangeProof proof = prover.prove(new BulletproofRangeWitness(42L));
         try {
             byte[] bytes = proof.getProof().serialize();
@@ -85,7 +87,7 @@ public class BpScenarios {
     private boolean bitMismatch(List<String> log) {
         var prover        = new BulletproofRangeProver(BIT_LENGTH);
         var wrongVerifier = new BulletproofRangeVerifier(16);
-        log.add("Step 1: Parameter binding — build a proof with an 8-bit prover.");
+        log.add("Step 1: Parameter binding — build a proof with a " + BIT_LENGTH + "-bit prover.");
         BulletproofRangeProof proof = prover.prove(new BulletproofRangeWitness(5L));
         log.add("Step 2: Check it with a 16-bit verifier (mismatched parameters).");
         boolean ok = wrongVerifier.verify(proof);
